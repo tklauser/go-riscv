@@ -86,6 +86,8 @@ func RelocName(arch *sys.Arch, r objabi.RelocType) string {
 			return elf.R_MIPS(nr).String()
 		case sys.PPC64:
 			return elf.R_PPC64(nr).String()
+		case sys.RISCV64:
+			return elf.R_RISCV(nr).String()
 		case sys.S390X:
 			return elf.R_390(nr).String()
 		default:

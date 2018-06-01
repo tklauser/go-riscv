@@ -44,6 +44,7 @@ var bootstrapDirs = []string{
 	"cmd/compile/internal/mips",
 	"cmd/compile/internal/mips64",
 	"cmd/compile/internal/ppc64",
+	"cmd/compile/internal/riscv64",
 	"cmd/compile/internal/types",
 	"cmd/compile/internal/s390x",
 	"cmd/compile/internal/ssa",
@@ -60,6 +61,7 @@ var bootstrapDirs = []string{
 	"cmd/internal/obj/arm64",
 	"cmd/internal/obj/mips",
 	"cmd/internal/obj/ppc64",
+	"cmd/internal/obj/riscv64",
 	"cmd/internal/obj/s390x",
 	"cmd/internal/obj/x86",
 	"cmd/internal/obj/wasm",
@@ -79,6 +81,7 @@ var bootstrapDirs = []string{
 	"cmd/link/internal/mips64",
 	"cmd/link/internal/objfile",
 	"cmd/link/internal/ppc64",
+	"cmd/link/internal/riscv64",
 	"cmd/link/internal/s390x",
 	"cmd/link/internal/sym",
 	"cmd/link/internal/x86",
@@ -107,6 +110,8 @@ var ignorePrefixes = []string{
 var ignoreSuffixes = []string{
 	"_arm64.s",
 	"_arm64.go",
+	"_riscv64.s",
+	"_riscv64.go",
 	"_wasm.s",
 	"_wasm.go",
 }
