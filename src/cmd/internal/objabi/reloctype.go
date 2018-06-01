@@ -64,6 +64,8 @@ const (
 	// R_CALLMIPS (only used on mips64) resolves to non-PC-relative target address
 	// of a CALL (JAL) instruction, by encoding the address into the instruction.
 	R_CALLMIPS
+	// R_CALLRISCV (only used on riscv64) is a no-op. It simply marks CALLs for stack checking.
+	R_CALLRISCV
 	R_CONST
 	R_PCREL
 	// R_TLS_LE, used on 386, amd64, and ARM, resolves to the offset of the
@@ -196,6 +198,16 @@ const (
 
 	// R_WASMIMPORT resolves to the index of the WebAssembly function import.
 	R_WASMIMPORT
+
+	// RISC-V.
+
+	// R_RISCV_PCREL_ITYPE resolves a 32-bit PC-relative address using an
+	// AUIPC + I-type instruction pair.
+	R_RISCV_PCREL_ITYPE
+
+	// R_RISCV_PCREL_STYPE resolves a 32-bit PC-relative address using an
+	// AUIPC + S-type instruction pair.
+	R_RISCV_PCREL_STYPE
 )
 
 // IsDirectJump reports whether r is a relocation for a direct jump.
