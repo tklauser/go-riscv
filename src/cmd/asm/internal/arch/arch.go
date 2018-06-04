@@ -11,6 +11,7 @@ import (
 	"cmd/internal/obj/arm64"
 	"cmd/internal/obj/mips"
 	"cmd/internal/obj/ppc64"
+	"cmd/internal/obj/riscv64"
 	"cmd/internal/obj/s390x"
 	"cmd/internal/obj/wasm"
 	"cmd/internal/obj/x86"
@@ -85,6 +86,8 @@ func Set(GOARCH string) *Arch {
 		a := archPPC64()
 		a.LinkArch = &ppc64.Linkppc64le
 		return a
+	case "riscv64":
+		return archRiscv64()
 	case "s390x":
 		a := archS390x()
 		a.LinkArch = &s390x.Links390x
@@ -533,6 +536,37 @@ func archMips64() *Arch {
 		RegisterPrefix: registerPrefix,
 		RegisterNumber: mipsRegisterNumber,
 		IsJump:         jumpMIPS,
+	}
+}
+
+var riscv64Jumps = map[string]bool{
+	"BEQ":  true,
+	"BNE":  true,
+	"BLT":  true,
+	"BGE":  true,
+	"BLTU": true,
+	"BGEU": true,
+	"CALL": true,
+	"JAL":  true,
+	"JALR": true,
+	"JMP":  true,
+}
+
+func archRiscv64() *Arch {
+	// Pseudo-registers.
+	riscv64.Registers["SB"] = RSB
+	riscv64.Registers["FP"] = RFP
+	riscv64.Registers["PC"] = RPC
+
+	return &Arch{
+		LinkArch:       &riscv64.Linkriscv64,
+		Instructions:   riscv64.Instructions,
+		Register:       riscv64.Registers,
+		RegisterPrefix: nil,
+		RegisterNumber: nilRegisterNumber,
+		IsJump: func(s string) bool {
+			return riscv64Jumps[s]
+		},
 	}
 }
 
