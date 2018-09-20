@@ -19,11 +19,11 @@ func adddynrel(ctxt *ld.Link, s *sym.Symbol, r *sym.Reloc) bool {
 	return false
 }
 
-func archreloc(ctxt *ld.Link, r *sym.Reloc, s *sym.Symbol, val *int64) bool {
+func archreloc(ctxt *ld.Link, r *sym.Reloc, s *sym.Symbol, val int64) (int64, bool) {
 	switch r.Type {
 	case objabi.R_CALLRISCV:
 		// Nothing to do.
-		return true
+		return val, true
 	case objabi.R_RISCV_PCREL_ITYPE, objabi.R_RISCV_PCREL_STYPE:
 		pc := s.Value + int64(r.Off)
 		off := ld.Symaddr(r.Sym) + r.Add - pc
@@ -62,17 +62,16 @@ func archreloc(ctxt *ld.Link, r *sym.Reloc, s *sym.Symbol, val *int64) bool {
 			log.Fatalf("Unknown relocation type: %v", r.Type)
 		}
 
-		auipc := int64(uint32(*val))
-		second := int64(uint32(*val >> 32))
+		auipc := int64(uint32(val))
+		second := int64(uint32(val >> 32))
 
 		auipc = (auipc &^ riscv64.UTypeImmMask) | int64(uint32(auipcImm))
 		second = (second &^ secondImmMask) | int64(uint32(secondImm))
 
-		*val = second<<32 | auipc
-		return true
+		return second<<32 | auipc, true
 	}
 
-	return false
+	return val, false
 }
 
 func archrelocvariant(ctxt *ld.Link, r *sym.Reloc, s *sym.Symbol, t int64) int64 {
