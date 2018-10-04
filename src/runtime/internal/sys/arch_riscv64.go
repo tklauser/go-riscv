@@ -7,7 +7,6 @@ package sys
 const (
 	ArchFamily          = RISCV64
 	BigEndian           = false
-	CacheLineSize       = 64
 	DefaultPhysPageSize = 4096
 	PCQuantum           = 4
 	Int64Align          = 8
