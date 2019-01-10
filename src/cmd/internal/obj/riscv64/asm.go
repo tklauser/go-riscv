@@ -1094,7 +1094,7 @@ func (c *ctxtRiscv) stacksplit(p *obj.Prog, framesize int64) *obj.Prog {
 		p = obj.Appendp(p, c.newprog)
 		p.As = AADDI
 		p.From.Type = obj.TYPE_CONST
-		p.From.Offset = objabi.StackGuard
+		p.From.Offset = int64(objabi.StackGuard)
 		p.SetFrom3(obj.Addr{Type: obj.TYPE_REG, Reg: REG_X2})
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = REG_A1
@@ -1110,7 +1110,7 @@ func (c *ctxtRiscv) stacksplit(p *obj.Prog, framesize int64) *obj.Prog {
 		p = obj.Appendp(p, c.newprog)
 		p.As = AMOV
 		p.From.Type = obj.TYPE_CONST
-		p.From.Offset = int64(framesize) + objabi.StackGuard - objabi.StackSmall
+		p.From.Offset = int64(framesize) + int64(objabi.StackGuard) - objabi.StackSmall
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = REG_A0
 
