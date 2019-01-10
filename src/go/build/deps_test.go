@@ -61,7 +61,7 @@ var pkgDeps = map[string][]string{
 
 	// L1 adds simple functions and strings processing,
 	// but not Unicode tables.
-	"math":          {"internal/cpu", "unsafe"},
+	"math":          {"internal/cpu", "unsafe", "math/bits"},
 	"math/bits":     {"unsafe"},
 	"math/cmplx":    {"math"},
 	"math/rand":     {"L0", "math"},
@@ -230,7 +230,7 @@ var pkgDeps = map[string][]string{
 	"go/constant":               {"L4", "go/token", "math/big"},
 	"go/importer":               {"L4", "go/build", "go/internal/gccgoimporter", "go/internal/gcimporter", "go/internal/srcimporter", "go/token", "go/types"},
 	"go/internal/gcimporter":    {"L4", "OS", "go/build", "go/constant", "go/token", "go/types", "text/scanner"},
-	"go/internal/gccgoimporter": {"L4", "OS", "debug/elf", "go/constant", "go/token", "go/types", "text/scanner"},
+	"go/internal/gccgoimporter": {"L4", "OS", "debug/elf", "go/constant", "go/token", "go/types", "internal/xcoff", "text/scanner"},
 	"go/internal/srcimporter":   {"L4", "OS", "fmt", "go/ast", "go/build", "go/parser", "go/token", "go/types", "path/filepath"},
 	"go/types":                  {"L4", "GOPARSER", "container/heap", "go/constant"},
 
@@ -273,6 +273,7 @@ var pkgDeps = map[string][]string{
 	"internal/goroot":                {"L4", "OS"},
 	"internal/singleflight":          {"sync"},
 	"internal/trace":                 {"L4", "OS", "container/heap"},
+	"internal/xcoff":                 {"L4", "OS", "debug/dwarf"},
 	"math/big":                       {"L4"},
 	"mime":                           {"L4", "OS", "syscall", "internal/syscall/windows/registry"},
 	"mime/quotedprintable":           {"L4"},

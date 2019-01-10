@@ -642,7 +642,8 @@ func (t *test) run() {
 		// against a set of regexps in comments.
 		ops := t.wantedAsmOpcodes(long)
 		for _, env := range ops.Envs() {
-			cmdline := []string{"build", "-gcflags", "-S"}
+			// -S=2 forces outermost line numbers when disassembling inlined code.
+			cmdline := []string{"build", "-gcflags", "-S=2"}
 			cmdline = append(cmdline, flags...)
 			cmdline = append(cmdline, long)
 			cmd := exec.Command(goTool(), cmdline...)
@@ -1212,7 +1213,7 @@ func (t *test) updateErrors(out, file string) {
 		msg := errStr[colon2+2:]
 		msg = strings.Replace(msg, file, base, -1) // normalize file mentions in error itself
 		msg = strings.TrimLeft(msg, " \t")
-		for _, r := range []string{`\`, `*`, `+`, `[`, `]`, `(`, `)`} {
+		for _, r := range []string{`\`, `*`, `+`, `?`, `[`, `]`, `(`, `)`} {
 			msg = strings.Replace(msg, r, `\`+r, -1)
 		}
 		msg = strings.Replace(msg, `"`, `.`, -1)

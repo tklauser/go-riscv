@@ -1204,6 +1204,9 @@ func (s *state) stmt(n *Node) {
 		p := s.expr(n.Left)
 		s.nilCheck(p)
 
+	case OINLMARK:
+		s.newValue1I(ssa.OpInlMark, types.TypeVoid, n.Xoffset, s.mem())
+
 	default:
 		s.Fatalf("unhandled stmt %v", n.Op)
 	}
@@ -2416,7 +2419,7 @@ func (s *state) append(n *Node, inplace bool) *ssa.Value {
 	// a := &s
 	// ptr, len, cap := s
 	// newlen := len + 3
-	// if newlen > cap {
+	// if uint(newlen) > uint(cap) {
 	//    newptr, len, newcap = growslice(ptr, len, cap, newlen)
 	//    vardef(a)       // if necessary, advise liveness we are writing a new a
 	//    *a.cap = newcap // write before ptr to avoid a spill
@@ -2454,7 +2457,7 @@ func (s *state) append(n *Node, inplace bool) *ssa.Value {
 	c := s.newValue1(ssa.OpSliceCap, types.Types[TINT], slice)
 	nl := s.newValue2(s.ssaOp(OADD, types.Types[TINT]), types.Types[TINT], l, s.constInt(types.Types[TINT], nargs))
 
-	cmp := s.newValue2(s.ssaOp(OGT, types.Types[TINT]), types.Types[TBOOL], nl, c)
+	cmp := s.newValue2(s.ssaOp(OGT, types.Types[TUINT]), types.Types[TBOOL], nl, c)
 	s.vars[&ptrVar] = p
 
 	if !inplace {
@@ -4022,12 +4025,33 @@ func (s *state) boundsCheck(idx, len *ssa.Value) {
 	s.check(cmp, panicindex)
 }
 
+func couldBeNegative(v *ssa.Value) bool {
+	switch v.Op {
+	case ssa.OpSliceLen, ssa.OpSliceCap, ssa.OpStringLen:
+		return false
+	case ssa.OpConst64:
+		return v.AuxInt < 0
+	case ssa.OpConst32:
+		return int32(v.AuxInt) < 0
+	}
+	return true
+}
+
 // sliceBoundsCheck generates slice bounds checking code. Checks if 0 <= idx <= len, branches to exit if not.
 // Starts a new block on return.
 // idx and len are already converted to full int width.
 func (s *state) sliceBoundsCheck(idx, len *ssa.Value) {
 	if Debug['B'] != 0 {
 		return
+	}
+	if couldBeNegative(len) {
+		// OpIsSliceInBounds requires second arg not negative; if it's not obviously true, must check.
+		cmpop := ssa.OpGeq64
+		if len.Type.Size() == 4 {
+			cmpop = ssa.OpGeq32
+		}
+		cmp := s.newValue2(cmpop, types.Types[TBOOL], len, s.zeroVal(len.Type))
+		s.check(cmp, panicslice)
 	}
 
 	// bounds check
@@ -5142,6 +5166,14 @@ func genssa(f *ssa.Func, pp *Progs) {
 				if v.Args[0].Reg() != v.Reg() {
 					v.Fatalf("OpConvert should be a no-op: %s; %s", v.Args[0].LongString(), v.LongString())
 				}
+			case ssa.OpInlMark:
+				p := thearch.Ginsnop(s.pp)
+				if pp.curfn.Func.lsym != nil {
+					// lsym is nil if the function name is "_".
+					pp.curfn.Func.lsym.Func.AddInlMark(p, v.AuxInt32())
+				}
+				// TODO: if matching line number, merge somehow with previous instruction?
+
 			default:
 				// let the backend handle it
 				// Special case for first line in function; move it to the start.
@@ -5522,6 +5554,7 @@ func (s *SSAGenState) Call(v *ssa.Value) *obj.Prog {
 	s.PrepareCall(v)
 
 	p := s.Prog(obj.ACALL)
+	p.Pos = v.Pos
 	if sym, ok := v.Aux.(*obj.LSym); ok {
 		p.To.Type = obj.TYPE_MEM
 		p.To.Name = obj.NAME_EXTERN

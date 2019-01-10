@@ -1367,7 +1367,7 @@ var gcMarkDoneFlushed uint32
 // termination.
 //
 // For debugging issue #27993.
-const debugCachedWork = true
+const debugCachedWork = false
 
 // gcWorkPauseGen is for debugging the mark completion algorithm.
 // gcWork put operations spin while gcWork.pauseGen == gcWorkPauseGen.
@@ -1417,6 +1417,12 @@ top:
 	// Flush all local buffers and collect flushedWork flags.
 	gcMarkDoneFlushed = 0
 	systemstack(func() {
+		gp := getg().m.curg
+		// Mark the user stack as preemptible so that it may be scanned.
+		// Otherwise, our attempt to force all P's to a safepoint could
+		// result in a deadlock as we attempt to preempt a worker that's
+		// trying to preempt us (e.g. for a stack scan).
+		casgstatus(gp, _Grunning, _Gwaiting)
 		forEachP(func(_p_ *p) {
 			// Flush the write barrier buffer, since this may add
 			// work to the gcWork.
@@ -1428,6 +1434,7 @@ top:
 			if debugCachedWork {
 				b := &_p_.wbBuf
 				b.end = uintptr(unsafe.Pointer(&b.buf[wbBufEntryPointers]))
+				b.debugGen = gcWorkPauseGen
 			}
 			// Flush the gcWork, since this may create global work
 			// and set the flushedWork flag.
@@ -1447,8 +1454,14 @@ top:
 				// there's a paused gcWork, then
 				// that's a bug.
 				_p_.gcw.pauseGen = gcWorkPauseGen
+				// Capture the G's stack.
+				for i := range _p_.gcw.pauseStack {
+					_p_.gcw.pauseStack[i] = 0
+				}
+				callers(1, _p_.gcw.pauseStack[:])
 			}
 		})
+		casgstatus(gp, _Gwaiting, _Grunning)
 	})
 
 	if gcMarkDoneFlushed != 0 {
@@ -1506,8 +1519,38 @@ top:
 					print(" wbuf2.n=", gcw.wbuf2.nobj)
 				}
 				print("\n")
+				if gcw.pauseGen == gcw.putGen {
+					println("runtime: checkPut already failed at this generation")
+				}
 				throw("throwOnGCWork")
 			}
+		}
+	} else {
+		// For unknown reasons (see issue #27993), there is
+		// sometimes work left over when we enter mark
+		// termination. Detect this and resume concurrent
+		// mark. This is obviously unfortunate.
+		//
+		// Switch to the system stack to call wbBufFlush1,
+		// though in this case it doesn't matter because we're
+		// non-preemptible anyway.
+		restart := false
+		systemstack(func() {
+			for _, p := range allp {
+				wbBufFlush1(p)
+				if !p.gcw.empty() {
+					restart = true
+					break
+				}
+			}
+		})
+		if restart {
+			getg().m.preemptoff = ""
+			systemstack(func() {
+				now := startTheWorldWithSema(true)
+				work.pauseNS += now - work.pauseStart
+			})
+			goto top
 		}
 	}
 

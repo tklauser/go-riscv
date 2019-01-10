@@ -12,8 +12,8 @@ stdout 'NUL|/dev/null'
 # which is not in a module.
 ! go list
 stderr 'cannot find main module'
-! go list -m
-stderr 'cannot find main module'
+go list -m
+stdout '^command-line-arguments$'
 # 'go list' in the working directory should fail even if there is a a 'package
 # main' present: without a main module, we do not know its package path.
 ! go list ./foo
@@ -36,6 +36,9 @@ stdout '^cmd/go$'
 go list $GOROOT/src/fmt
 stdout '^fmt$'
 
+# 'go list' should work with file arguments.
+go list ./foo/foo.go
+stdout 'command-line-arguments'
 
 # 'go list -m' with an explicit version should resolve that version.
 go list -m example.com/version@latest
@@ -145,6 +148,10 @@ stderr 'no such package'
 stderr 'can only use path@version syntax with'
 
 
+# 'go fmt' should be able to format files outside of a module.
+go fmt foo/foo.go
+
+
 # The remainder of the test checks dependencies by linking and running binaries.
 [short] stop
 
@@ -182,15 +189,31 @@ stdout 'using example.com/version v1.0.0'
 
 # 'go run' should use 'main' as the effective module and import path.
 go run ./foo/foo.go
-stdout 'path is \.$'
-stdout 'main is main \(devel\)'
+stdout 'path is command-line-arguments$'
+stdout 'main is command-line-arguments \(devel\)'
 stdout 'using example.com/version v1.1.0'
+
+# 'go generate' should work with file arguments.
+[exec:touch] go generate ./foo/foo.go
+[exec:touch] exists ./foo/gen.txt
+
+# 'go install' should work with file arguments.
+go install ./foo/foo.go
+
+# 'go test' should work with file arguments.
+go test -v ./foo/foo_test.go
+stdout 'foo was tested'
+
+# 'go vet' should work with file arguments.
+go vet ./foo/foo.go
 
 
 -- README.txt --
 There is no go.mod file in the working directory.
 
 -- foo/foo.go --
+//go:generate touch gen.txt
+
 package main
 
 import (
@@ -211,4 +234,16 @@ func main() {
 	for _, m := range info.Deps {
 		fmt.Fprintf(os.Stdout, "using %s %s\n", m.Path, m.Version)
 	}
+}
+
+-- foo/foo_test.go --
+package main
+
+import (
+	"fmt"
+	"testing"
+)
+
+func TestFoo(t *testing.T) {
+	fmt.Println("foo was tested")
 }

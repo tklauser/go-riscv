@@ -2500,6 +2500,7 @@ const (
 	OpVarKill
 	OpVarLive
 	OpKeepAlive
+	OpInlMark
 	OpInt64Make
 	OpInt64Hi
 	OpInt64Lo
@@ -31227,6 +31228,12 @@ var opcodeTable = [...]opInfo{
 		argLen:    2,
 		zeroWidth: true,
 		generic:   true,
+	},
+	{
+		name:    "InlMark",
+		auxType: auxInt32,
+		argLen:  1,
+		generic: true,
 	},
 	{
 		name:    "Int64Make",
