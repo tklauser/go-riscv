@@ -21,11 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/build"
+	"internal/lazyregexp"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -33,7 +33,7 @@ import (
 
 var (
 	cwd            string // TODO(bcmills): Is this redundant with base.Cwd?
-	MustUseModules = mustUseModules()
+	mustUseModules = true
 	initialized    bool
 
 	modRoot     string
@@ -41,6 +41,15 @@ var (
 	modFileData []byte
 	excluded    map[module.Version]bool
 	Target      module.Version
+
+	// targetPrefix is the path prefix for packages in Target, without a trailing
+	// slash. For most modules, targetPrefix is just Target.Path, but the
+	// standard-library module "std" has an empty prefix.
+	targetPrefix string
+
+	// targetInGorootSrc caches whether modRoot is within GOROOT/src.
+	// The "std" module is special within GOROOT/src, but not otherwise.
+	targetInGorootSrc bool
 
 	gopath string
 
@@ -69,16 +78,6 @@ func BinDir() string {
 	return filepath.Join(gopath, "bin")
 }
 
-// mustUseModules reports whether we are invoked as vgo
-// (as opposed to go).
-// If so, we only support builds with go.mod files.
-func mustUseModules() bool {
-	name := os.Args[0]
-	name = name[strings.LastIndex(name, "/")+1:]
-	name = name[strings.LastIndex(name, `\`)+1:]
-	return strings.HasPrefix(name, "vgo")
-}
-
 var inGOPATH bool // running in GOPATH/src
 
 // Init determines whether module mode is enabled, locates the root of the
@@ -95,14 +94,13 @@ func Init() {
 	switch env {
 	default:
 		base.Fatalf("go: unknown environment setting GO111MODULE=%s", env)
-	case "", "auto":
-		// leave MustUseModules alone
-	case "on":
-		MustUseModules = true
+	case "auto":
+		mustUseModules = false
+	case "on", "":
+		mustUseModules = true
 	case "off":
-		if !MustUseModules {
-			return
-		}
+		mustUseModules = false
+		return
 	}
 
 	// Disable any prompting for passwords by Git.
@@ -149,12 +147,12 @@ func Init() {
 		}
 	}
 
-	if inGOPATH && !MustUseModules {
+	if inGOPATH && !mustUseModules {
 		if CmdModInit {
 			die() // Don't init a module that we're just going to ignore.
 		}
 		// No automatic enabling in GOPATH.
-		if root, _ := FindModuleRoot(cwd, "", false); root != "" {
+		if root := findModuleRoot(cwd); root != "" {
 			cfg.GoModInGOPATH = filepath.Join(root, "go.mod")
 		}
 		return
@@ -164,10 +162,10 @@ func Init() {
 		// Running 'go mod init': go.mod will be created in current directory.
 		modRoot = cwd
 	} else {
-		modRoot, _ = FindModuleRoot(cwd, "", MustUseModules)
+		modRoot = findModuleRoot(cwd)
 		if modRoot == "" {
-			if !MustUseModules {
-				// GO111MODULE is 'auto' (or unset), and we can't find a module root.
+			if !mustUseModules {
+				// GO111MODULE is 'auto', and we can't find a module root.
 				// Stay in GOPATH mode.
 				return
 			}
@@ -266,7 +264,7 @@ func init() {
 // (usually through MustModRoot).
 func Enabled() bool {
 	Init()
-	return modRoot != "" || MustUseModules
+	return modRoot != "" || mustUseModules
 }
 
 // ModRoot returns the root of the main module.
@@ -299,8 +297,21 @@ func die() {
 	if os.Getenv("GO111MODULE") == "off" {
 		base.Fatalf("go: modules disabled by GO111MODULE=off; see 'go help modules'")
 	}
-	if inGOPATH && !MustUseModules {
+	if inGOPATH && !mustUseModules {
 		base.Fatalf("go: modules disabled inside GOPATH/src by GO111MODULE=auto; see 'go help modules'")
+	}
+	if cwd != "" {
+		if dir, name := findAltConfig(cwd); dir != "" {
+			rel, err := filepath.Rel(cwd, dir)
+			if err != nil {
+				rel = dir
+			}
+			cdCmd := ""
+			if rel != "." {
+				cdCmd = fmt.Sprintf("cd %s && ", rel)
+			}
+			base.Fatalf("go: cannot find main module, but found %s in %s\n\tto create a module there, run:\n\t%sgo mod init", name, dir, cdCmd)
+		}
 	}
 	base.Fatalf("go: cannot find main module; see 'go help modules'")
 }
@@ -315,6 +326,7 @@ func InitMod() {
 	Init()
 	if modRoot == "" {
 		Target = module.Version{Path: "command-line-arguments"}
+		targetPrefix = "command-line-arguments"
 		buildList = []module.Version{Target}
 		return
 	}
@@ -330,12 +342,6 @@ func InitMod() {
 	gomod := filepath.Join(modRoot, "go.mod")
 	data, err := ioutil.ReadFile(gomod)
 	if err != nil {
-		if os.IsNotExist(err) {
-			legacyModInit()
-			modFileToBuildList()
-			WriteGoMod()
-			return
-		}
 		base.Fatalf("go: %v", err)
 	}
 
@@ -349,7 +355,7 @@ func InitMod() {
 
 	if len(f.Syntax.Stmt) == 0 || f.Module == nil {
 		// Empty mod file. Must add module path.
-		path, err := FindModulePath(modRoot)
+		path, err := findModulePath(modRoot)
 		if err != nil {
 			base.Fatalf("go: %v", err)
 		}
@@ -373,6 +379,14 @@ func InitMod() {
 // modFileToBuildList initializes buildList from the modFile.
 func modFileToBuildList() {
 	Target = modFile.Module.Mod
+	targetPrefix = Target.Path
+	if search.InDir(cwd, cfg.GOROOTsrc) != "" {
+		targetInGorootSrc = true
+		if Target.Path == "std" {
+			targetPrefix = ""
+		}
+	}
+
 	list := []module.Version{Target}
 	for _, r := range modFile.Require {
 		list = append(list, r.Mod)
@@ -387,7 +401,7 @@ func Allowed(m module.Version) bool {
 
 func legacyModInit() {
 	if modFile == nil {
-		path, err := FindModulePath(modRoot)
+		path, err := findModulePath(modRoot)
 		if err != nil {
 			base.Fatalf("go: %v", err)
 		}
@@ -420,13 +434,6 @@ func legacyModInit() {
 	}
 }
 
-// InitGoStmt adds a go statement, unless there already is one.
-func InitGoStmt() {
-	if modFile.Go == nil {
-		addGoStmt()
-	}
-}
-
 // addGoStmt adds a go statement referring to the current version.
 func addGoStmt() {
 	tags := build.Default.ReleaseTags
@@ -454,19 +461,13 @@ var altConfigs = []string{
 	".git/config",
 }
 
-// Exported only for testing.
-func FindModuleRoot(dir, limit string, legacyConfigOK bool) (root, file string) {
+func findModuleRoot(dir string) (root string) {
 	dir = filepath.Clean(dir)
-	dir1 := dir
-	limit = filepath.Clean(limit)
 
 	// Look for enclosing go.mod.
 	for {
 		if fi, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil && !fi.IsDir() {
-			return dir, "go.mod"
-		}
-		if dir == limit {
-			break
+			return dir
 		}
 		d := filepath.Dir(dir)
 		if d == dir {
@@ -474,36 +475,40 @@ func FindModuleRoot(dir, limit string, legacyConfigOK bool) (root, file string) 
 		}
 		dir = d
 	}
+	return ""
+}
 
-	// Failing that, look for enclosing alternate version config.
-	if legacyConfigOK {
-		dir = dir1
-		for {
-			for _, name := range altConfigs {
-				if fi, err := os.Stat(filepath.Join(dir, name)); err == nil && !fi.IsDir() {
-					return dir, name
+func findAltConfig(dir string) (root, name string) {
+	dir = filepath.Clean(dir)
+	for {
+		for _, name := range altConfigs {
+			if fi, err := os.Stat(filepath.Join(dir, name)); err == nil && !fi.IsDir() {
+				if rel := search.InDir(dir, cfg.BuildContext.GOROOT); rel == "." {
+					// Don't suggest creating a module from $GOROOT/.git/config.
+					return "", ""
 				}
+				return dir, name
 			}
-			if dir == limit {
-				break
-			}
-			d := filepath.Dir(dir)
-			if d == dir {
-				break
-			}
-			dir = d
 		}
+		d := filepath.Dir(dir)
+		if d == dir {
+			break
+		}
+		dir = d
 	}
-
 	return "", ""
 }
 
-// Exported only for testing.
-func FindModulePath(dir string) (string, error) {
+func findModulePath(dir string) (string, error) {
 	if CmdModModule != "" {
 		// Running go mod init x/y/z; return x/y/z.
 		return CmdModModule, nil
 	}
+
+	// TODO(bcmills): once we have located a plausible module path, we should
+	// query version control (if available) to verify that it matches the major
+	// version of the most recent tag.
+	// See https://golang.org/issue/29433 and https://golang.org/issue/27009.
 
 	// Cast about for import comments,
 	// first in top-level directory, then in subdirectories.
@@ -560,12 +565,12 @@ func FindModulePath(dir string) (string, error) {
 		return "github.com/" + string(m[1]), nil
 	}
 
-	return "", fmt.Errorf("cannot determine module path for source directory %s (outside GOPATH, no import comments)", dir)
+	return "", fmt.Errorf("cannot determine module path for source directory %s (outside GOPATH, module path not specified)", dir)
 }
 
 var (
-	gitOriginRE     = regexp.MustCompile(`(?m)^\[remote "origin"\]\r?\n\turl = (?:https://github.com/|git@github.com:|gh:)([^/]+/[^/]+?)(\.git)?\r?\n`)
-	importCommentRE = regexp.MustCompile(`(?m)^package[ \t]+[^ \t\r\n/]+[ \t]+//[ \t]+import[ \t]+(\"[^"]+\")[ \t]*\r?\n`)
+	gitOriginRE     = lazyregexp.New(`(?m)^\[remote "origin"\]\r?\n\turl = (?:https://github.com/|git@github.com:|gh:)([^/]+/[^/]+?)(\.git)?\r?\n`)
+	importCommentRE = lazyregexp.New(`(?m)^package[ \t]+[^ \t\r\n/]+[ \t]+//[ \t]+import[ \t]+(\"[^"]+\")[ \t]*\r?\n`)
 )
 
 func findImportComment(file string) string {

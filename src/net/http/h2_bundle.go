@@ -44,9 +44,9 @@ import (
 	"sync"
 	"time"
 
-	"internal/x/net/http/httpguts"
-	"internal/x/net/http2/hpack"
-	"internal/x/net/idna"
+	"golang.org/x/net/http/httpguts"
+	"golang.org/x/net/http2/hpack"
+	"golang.org/x/net/idna"
 )
 
 // A list of the possible cipher suite ids. Taken from
@@ -4852,7 +4852,7 @@ func (sc *http2serverConn) resetStream(se http2StreamError) {
 
 // processFrameFromReader processes the serve loop's read from readFrameCh from the
 // frame-reading goroutine.
-// processFrameFromReader reports whether the connection should be kept open.
+// processFrameFromReader returns whether the connection should be kept open.
 func (sc *http2serverConn) processFrameFromReader(res http2readFrameResult) bool {
 	sc.serveG.check()
 	err := res.err
@@ -5156,12 +5156,6 @@ func (sc *http2serverConn) processData(f *http2DataFrame) error {
 		// treated as a connection error (Section 5.4.1) of
 		// type PROTOCOL_ERROR."
 		return http2ConnectionError(http2ErrCodeProtocol)
-	}
-	// RFC 7540, sec 6.1: If a DATA frame is received whose stream is not in
-	// "open" or "half-closed (local)" state, the recipient MUST respond with a
-	// stream error (Section 5.4.2) of type STREAM_CLOSED.
-	if state == http2stateClosed {
-		return http2streamError(id, http2ErrCodeStreamClosed)
 	}
 	if st == nil || state != http2stateOpen || st.gotTrailerHeader || st.resetQueued {
 		// This includes sending a RST_STREAM if the stream is

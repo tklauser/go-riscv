@@ -1617,9 +1617,21 @@ func BenchmarkFieldsFunc(b *testing.B) {
 }
 
 func BenchmarkTrimSpace(b *testing.B) {
-	s := []byte("  Some text.  \n")
-	for i := 0; i < b.N; i++ {
-		TrimSpace(s)
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{"NoTrim", []byte("typical")},
+		{"ASCII", []byte("  foo bar  ")},
+		{"SomeNonASCII", []byte("    \u2000\t\r\n x\t\t\r\r\ny\n \u3000    ")},
+		{"JustNonASCII", []byte("\u2000\u2000\u2000☺☺☺☺\u3000\u3000\u3000")},
+	}
+	for _, test := range tests {
+		b.Run(test.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				TrimSpace(test.input)
+			}
+		})
 	}
 }
 
@@ -1641,6 +1653,39 @@ func makeBenchInputHard() []byte {
 }
 
 var benchInputHard = makeBenchInputHard()
+
+func benchmarkIndexHard(b *testing.B, sep []byte) {
+	for i := 0; i < b.N; i++ {
+		Index(benchInputHard, sep)
+	}
+}
+
+func benchmarkLastIndexHard(b *testing.B, sep []byte) {
+	for i := 0; i < b.N; i++ {
+		LastIndex(benchInputHard, sep)
+	}
+}
+
+func benchmarkCountHard(b *testing.B, sep []byte) {
+	for i := 0; i < b.N; i++ {
+		Count(benchInputHard, sep)
+	}
+}
+
+func BenchmarkIndexHard1(b *testing.B) { benchmarkIndexHard(b, []byte("<>")) }
+func BenchmarkIndexHard2(b *testing.B) { benchmarkIndexHard(b, []byte("</pre>")) }
+func BenchmarkIndexHard3(b *testing.B) { benchmarkIndexHard(b, []byte("<b>hello world</b>")) }
+func BenchmarkIndexHard4(b *testing.B) {
+	benchmarkIndexHard(b, []byte("<pre><b>hello</b><strong>world</strong></pre>"))
+}
+
+func BenchmarkLastIndexHard1(b *testing.B) { benchmarkLastIndexHard(b, []byte("<>")) }
+func BenchmarkLastIndexHard2(b *testing.B) { benchmarkLastIndexHard(b, []byte("</pre>")) }
+func BenchmarkLastIndexHard3(b *testing.B) { benchmarkLastIndexHard(b, []byte("<b>hello world</b>")) }
+
+func BenchmarkCountHard1(b *testing.B) { benchmarkCountHard(b, []byte("<>")) }
+func BenchmarkCountHard2(b *testing.B) { benchmarkCountHard(b, []byte("</pre>")) }
+func BenchmarkCountHard3(b *testing.B) { benchmarkCountHard(b, []byte("<b>hello world</b>")) }
 
 func BenchmarkSplitEmptySeparator(b *testing.B) {
 	for i := 0; i < b.N; i++ {

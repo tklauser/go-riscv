@@ -587,6 +587,8 @@ Additional information available from 'go env' but not read from the environment
 
 	GOEXE
 		The executable file name suffix (".exe" on Windows, "" on other systems).
+	GOGCCFLAGS
+		A space-separated list of arguments supplied to the CC command.
 	GOHOSTARCH
 		The architecture (GOARCH) of the Go toolchain binaries.
 	GOHOSTOS
@@ -635,15 +637,6 @@ constraints, but the go command stops scanning for build constraints
 at the first item in the file that is not a blank line or //-style
 line comment. See the go/build package documentation for
 more details.
-
-Non-test Go source files can also include a //go:binary-only-package
-comment, indicating that the package sources are included
-for documentation only and must not be used to build the
-package binary. This enables distribution of Go packages in
-their compiled form alone. Even binary-only packages require
-accurate import blocks listing required dependencies, so that
-those dependencies can be supplied when linking the resulting
-command.
 	`,
 }
 
@@ -705,7 +698,6 @@ The default location for cache data is a subdirectory named go-build
 in the standard user cache directory for the current operating system.
 Setting the GOCACHE environment variable overrides this default,
 and running 'go env GOCACHE' prints the current cache directory.
-You can set the variable to 'off' to disable the cache.
 
 The go command periodically deletes cached data that has not been
 used recently. Running 'go clean -cache' deletes all cached data.

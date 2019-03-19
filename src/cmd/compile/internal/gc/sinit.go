@@ -568,7 +568,7 @@ var statuniqgen int // name generator for static temps
 // returned node for readonly nodes.
 func staticname(t *types.Type) *Node {
 	// Don't use lookupN; it interns the resulting string, but these are all unique.
-	n := newname(lookup(fmt.Sprintf("statictmp_%d", statuniqgen)))
+	n := newname(lookup(fmt.Sprintf(".stmp_%d", statuniqgen)))
 	statuniqgen++
 	addvar(n, t, PEXTERN)
 	return n
@@ -729,6 +729,7 @@ func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes)
 			if r.Sym.IsBlank() {
 				return nblank, r.Left
 			}
+			setlineno(r)
 			return nodSym(ODOT, var_, r.Sym), r.Left
 		}
 	default:
@@ -756,7 +757,7 @@ func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes)
 		}
 
 		// build list of assignments: var[index] = expr
-		setlineno(value)
+		setlineno(a)
 		a = nod(OAS, a, value)
 		a = typecheck(a, ctxStmt)
 		switch kind {

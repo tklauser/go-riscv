@@ -199,6 +199,11 @@ const (
 	// R_WASMIMPORT resolves to the index of the WebAssembly function import.
 	R_WASMIMPORT
 
+	// R_XCOFFREF (only used on aix/ppc64) prevents garbage collection by ld
+	// of a symbol. This isn't a real relocation, it can be placed in anywhere
+	// in a symbol and target any symbols.
+	R_XCOFFREF
+
 	// RISC-V.
 
 	// R_RISCV_PCREL_ITYPE resolves a 32-bit PC-relative address using an

@@ -123,15 +123,7 @@ func newFile(fd uintptr, name string, kind newFileKind) *File {
 	if kind == kindOpenFile {
 		var st syscall.Stat_t
 		switch runtime.GOOS {
-		case "freebsd":
-			// On FreeBSD before 10.4 it used to crash the
-			// system unpredictably while running all.bash.
-			// When we stop supporting FreeBSD 10 we can merge
-			// this into the dragonfly/netbsd/openbsd case.
-			// Issue 27619.
-			pollable = false
-
-		case "dragonfly", "netbsd", "openbsd":
+		case "dragonfly", "freebsd", "netbsd", "openbsd":
 			// Don't try to use kqueue with regular files on *BSDs.
 			// On FreeBSD a regular file is always
 			// reported as ready for writing.
@@ -186,6 +178,7 @@ func epipecheck(file *File, e error) {
 const DevNull = "/dev/null"
 
 // openFileNolog is the Unix implementation of OpenFile.
+// Changes here should be reflected in openFdAt, if relevant.
 func openFileNolog(name string, flag int, perm FileMode) (*File, error) {
 	setSticky := false
 	if !supportsCreateWithStickyBit && flag&O_CREATE != 0 && perm&ModeSticky != 0 {
@@ -397,4 +390,23 @@ func (f *File) readdir(n int) (fi []FileInfo, err error) {
 		err = io.EOF
 	}
 	return fi, err
+}
+
+// Readlink returns the destination of the named symbolic link.
+// If there is an error, it will be of type *PathError.
+func Readlink(name string) (string, error) {
+	for len := 128; ; len *= 2 {
+		b := make([]byte, len)
+		n, e := fixCount(syscall.Readlink(name, b))
+		// buffer too small
+		if runtime.GOOS == "aix" && e == syscall.ERANGE {
+			continue
+		}
+		if e != nil {
+			return "", &PathError{"readlink", name, e}
+		}
+		if n < len {
+			return string(b[0:n]), nil
+		}
+	}
 }

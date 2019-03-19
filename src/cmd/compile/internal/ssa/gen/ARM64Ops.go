@@ -130,6 +130,10 @@ func init() {
 		gpspsbg    = gpspg | buildReg("SB")
 		fp         = buildReg("F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 F18 F19 F20 F21 F22 F23 F24 F25 F26 F27 F28 F29 F30 F31")
 		callerSave = gp | fp | buildReg("g") // runtime.setg (and anything calling it) may clobber g
+		r0         = buildReg("R0")
+		r1         = buildReg("R1")
+		r2         = buildReg("R2")
+		r3         = buildReg("R3")
 	)
 	// Common regInfo
 	var (
@@ -158,6 +162,7 @@ func init() {
 		fp21      = regInfo{inputs: []regMask{fp, fp}, outputs: []regMask{fp}}
 		fp31      = regInfo{inputs: []regMask{fp, fp, fp}, outputs: []regMask{fp}}
 		fp2flags  = regInfo{inputs: []regMask{fp, fp}}
+		fp1flags  = regInfo{inputs: []regMask{fp}}
 		fpload    = regInfo{inputs: []regMask{gpspsbg}, outputs: []regMask{fp}}
 		fp2load   = regInfo{inputs: []regMask{gpspsbg, gpg}, outputs: []regMask{fp}}
 		fpstore   = regInfo{inputs: []regMask{gpspsbg, fp}}
@@ -271,6 +276,8 @@ func init() {
 		{name: "TSTWconst", argLength: 1, reg: gp1flags, asm: "TSTW", aux: "Int32", typ: "Flags"}, // arg0 & auxInt compare to 0, 32 bit
 		{name: "FCMPS", argLength: 2, reg: fp2flags, asm: "FCMPS", typ: "Flags"},                  // arg0 compare to arg1, float32
 		{name: "FCMPD", argLength: 2, reg: fp2flags, asm: "FCMPD", typ: "Flags"},                  // arg0 compare to arg1, float64
+		{name: "FCMPS0", argLength: 1, reg: fp1flags, asm: "FCMPS", typ: "Flags"},                 // arg0 compare to 0, float32
+		{name: "FCMPD0", argLength: 1, reg: fp1flags, asm: "FCMPD", typ: "Flags"},                 // arg0 compare to 0, float64
 
 		// shifted ops
 		{name: "MVNshiftLL", argLength: 1, reg: gp11, asm: "MVN", aux: "Int64"},                   // ^(arg0<<auxInt)
@@ -466,7 +473,10 @@ func init() {
 		{name: "LessEqualU", argLength: 1, reg: readflags},    // bool, true flags encode unsigned x<=y false otherwise.
 		{name: "GreaterThanU", argLength: 1, reg: readflags},  // bool, true flags encode unsigned x>y false otherwise.
 		{name: "GreaterEqualU", argLength: 1, reg: readflags}, // bool, true flags encode unsigned x>=y false otherwise.
-
+		{name: "LessThanF", argLength: 1, reg: readflags},     // bool, true flags encode floating-point x<y false otherwise.
+		{name: "LessEqualF", argLength: 1, reg: readflags},    // bool, true flags encode floating-point x<=y false otherwise.
+		{name: "GreaterThanF", argLength: 1, reg: readflags},  // bool, true flags encode floating-point x>y false otherwise.
+		{name: "GreaterEqualF", argLength: 1, reg: readflags}, // bool, true flags encode floating-point x>=y false otherwise.
 		// duffzero
 		// arg0 = address of memory to zero
 		// arg1 = mem
@@ -644,6 +654,13 @@ func init() {
 		// It saves all GP registers if necessary,
 		// but clobbers R30 (LR) because it's a call.
 		{name: "LoweredWB", argLength: 3, reg: regInfo{inputs: []regMask{buildReg("R2"), buildReg("R3")}, clobbers: (callerSave &^ gpg) | buildReg("R30")}, clobberFlags: true, aux: "Sym", symEffect: "None"},
+
+		// There are three of these functions so that they can have three different register inputs.
+		// When we check 0 <= c <= cap (A), then 0 <= b <= c (B), then 0 <= a <= b (C), we want the
+		// default registers to match so we don't need to copy registers around unnecessarily.
+		{name: "LoweredPanicBoundsA", argLength: 3, aux: "Int64", reg: regInfo{inputs: []regMask{r2, r3}}, typ: "Mem"}, // arg0=idx, arg1=len, arg2=mem, returns memory. AuxInt contains report code (see PanicBounds in generic.go).
+		{name: "LoweredPanicBoundsB", argLength: 3, aux: "Int64", reg: regInfo{inputs: []regMask{r1, r2}}, typ: "Mem"}, // arg0=idx, arg1=len, arg2=mem, returns memory. AuxInt contains report code (see PanicBounds in generic.go).
+		{name: "LoweredPanicBoundsC", argLength: 3, aux: "Int64", reg: regInfo{inputs: []regMask{r0, r1}}, typ: "Mem"}, // arg0=idx, arg1=len, arg2=mem, returns memory. AuxInt contains report code (see PanicBounds in generic.go).
 	}
 
 	blocks := []blockData{
@@ -663,6 +680,10 @@ func init() {
 		{name: "NZW"},  // Control != 0, 32-bit
 		{name: "TBZ"},  // Control & (1 << Aux.(int64)) == 0
 		{name: "TBNZ"}, // Control & (1 << Aux.(int64)) != 0
+		{name: "FLT"},
+		{name: "FLE"},
+		{name: "FGT"},
+		{name: "FGE"},
 	}
 
 	archs = append(archs, arch{

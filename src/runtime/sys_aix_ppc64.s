@@ -30,7 +30,13 @@ TEXT runtime·callCfunction(SB),	NOSPLIT|NOFRAME,$0
 // Called by runtime.asmcgocall
 // It reserves a stack of 288 bytes for the C function.
 // NOT USING GO CALLING CONVENTION
-TEXT runtime·asmsyscall6(SB),NOSPLIT,$256
+// runtime.asmsyscall6 is a function descriptor to the real asmsyscall6.
+DATA	runtime·asmsyscall6+0(SB)/8, $runtime·_asmsyscall6(SB)
+DATA	runtime·asmsyscall6+8(SB)/8, $TOC(SB)
+DATA	runtime·asmsyscall6+16(SB)/8, $0
+GLOBL	runtime·asmsyscall6(SB), NOPTR, $24
+
+TEXT runtime·_asmsyscall6(SB),NOSPLIT,$256
 	MOVD	R3, 48(R1) // Save libcall for later
 	MOVD	libcall_fn(R3), R12
 	MOVD	libcall_args(R3), R9
@@ -103,6 +109,9 @@ TEXT runtime·_sigtramp(SB),NOSPLIT|NOFRAME,$0
 
 	BL	runtime·load_g(SB)
 
+	CMP	$0, g
+	BEQ	sigtrampnog // g == nil
+
 	// Save m->libcall. We need to do this because we
 	// might get interrupted by a signal in runtime·asmcgocall.
 
@@ -149,6 +158,7 @@ TEXT runtime·_sigtramp(SB),NOSPLIT|NOFRAME,$0
 	MOVD	120(R1), R8
 	MOVD	R8, 0(R7)
 
+exit:
 	// restore registers
 	MOVD	56(R1),R31
 	MOVD	64(R1),g
@@ -159,6 +169,19 @@ TEXT runtime·_sigtramp(SB),NOSPLIT|NOFRAME,$0
 	MOVD	16(R1), R0
 	MOVD	R0, LR
 	BR (LR)
+
+sigtrampnog:
+	// Signal arrived on a non-Go thread.
+	// SIGPROF handler is not yet available so simply call badsignal,
+	// after having created *sigctxt.
+	MOVD	R4, 80(R1)
+	MOVD	R5, 88(R1)
+	MOVD	R1, R4
+	ADD		$80, R4
+	MOVD	R4, FIXED_FRAME+8(R1)
+	MOVD	R3, FIXED_FRAME+0(R1)
+	BL runtime·badsignal(SB)
+	JMP	exit
 
 // runtime.tstart is a function descriptor to the real tstart.
 DATA	runtime·tstart+0(SB)/8, $runtime·_tstart(SB)
@@ -198,4 +221,36 @@ TEXT runtime·osyield1(SB),NOSPLIT,$0
 	MOVD	R0, CTR
 	BL	(CTR)
 	MOVD	40(R1), R2
+	BL runtime·reginit(SB)
+	RET
+
+
+// Runs on OS stack, called from runtime·sigprocmask.
+TEXT runtime·sigprocmask1(SB),NOSPLIT,$0-24
+	MOVD	how+0(FP), R3
+	MOVD	new+8(FP), R4
+	MOVD	old+16(FP), R5
+	MOVD	$libpthread_sigthreadmask(SB), R12
+	MOVD	0(R12), R12
+	MOVD	R2, 40(R1)
+	MOVD	0(R12), R0
+	MOVD	8(R12), R2
+	MOVD	R0, CTR
+	BL	(CTR)
+	MOVD	40(R1), R2
+	BL runtime·reginit(SB)
+	RET
+
+// Runs on OS stack, called from runtime·usleep.
+TEXT runtime·usleep1(SB),NOSPLIT,$0-8
+	MOVW	us+0(FP), R3
+	MOVD	$libc_usleep(SB), R12
+	MOVD	0(R12), R12
+	MOVD	R2, 40(R1)
+	MOVD	0(R12), R0
+	MOVD	8(R12), R2
+	MOVD	R0, CTR
+	BL	(CTR)
+	MOVD	40(R1), R2
+	BL runtime·reginit(SB)
 	RET

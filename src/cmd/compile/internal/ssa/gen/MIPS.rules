@@ -410,6 +410,13 @@
 // Write barrier.
 (WB {fn} destptr srcptr mem) -> (LoweredWB {fn} destptr srcptr mem)
 
+(PanicBounds [kind] x y mem) && boundsABI(kind) == 0 -> (LoweredPanicBoundsA [kind] x y mem)
+(PanicBounds [kind] x y mem) && boundsABI(kind) == 1 -> (LoweredPanicBoundsB [kind] x y mem)
+(PanicBounds [kind] x y mem) && boundsABI(kind) == 2 -> (LoweredPanicBoundsC [kind] x y mem)
+
+(PanicExtend [kind] hi lo y mem) && boundsABI(kind) == 0 -> (LoweredPanicExtendA [kind] hi lo y mem)
+(PanicExtend [kind] hi lo y mem) && boundsABI(kind) == 1 -> (LoweredPanicExtendB [kind] hi lo y mem)
+(PanicExtend [kind] hi lo y mem) && boundsABI(kind) == 2 -> (LoweredPanicExtendC [kind] hi lo y mem)
 
 // Optimizations
 
@@ -688,7 +695,7 @@
 (GEZ (MOVWconst [c]) yes no) && int32(c) <  0 -> (First nil no yes)
 
 // conditional move
-(CMOVZ _ b (MOVWconst [0])) -> b
+(CMOVZ _ f (MOVWconst [0])) -> f
 (CMOVZ a _ (MOVWconst [c])) && c!=0 -> a
 (CMOVZzero _ (MOVWconst [0])) -> (MOVWconst [0])
 (CMOVZzero a (MOVWconst [c])) && c!=0 -> a

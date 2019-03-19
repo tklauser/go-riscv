@@ -243,6 +243,14 @@ func compile(fn *Node) {
 	// From this point, there should be no uses of Curfn. Enforce that.
 	Curfn = nil
 
+	if fn.funcname() == "_" {
+		// We don't need to generate code for this function, just report errors in its body.
+		// At this point we've generated any errors needed.
+		// (Beyond here we generate only non-spec errors, like "stack frame too large".)
+		// See issue 29870.
+		return
+	}
+
 	// Set up the function's LSym early to avoid data races with the assemblers.
 	fn.Func.initLSym(true)
 
@@ -250,17 +258,15 @@ func compile(fn *Node) {
 	// be types of stack objects. We need to do this here
 	// because symbols must be allocated before the parallel
 	// phase of the compiler.
-	if fn.Func.lsym != nil { // not func _(){}
-		for _, n := range fn.Func.Dcl {
-			switch n.Class() {
-			case PPARAM, PPARAMOUT, PAUTO:
-				if livenessShouldTrack(n) && n.Addrtaken() {
-					dtypesym(n.Type)
-					// Also make sure we allocate a linker symbol
-					// for the stack object data, for the same reason.
-					if fn.Func.lsym.Func.StackObjects == nil {
-						fn.Func.lsym.Func.StackObjects = lookup(fmt.Sprintf("%s.stkobj", fn.funcname())).Linksym()
-					}
+	for _, n := range fn.Func.Dcl {
+		switch n.Class() {
+		case PPARAM, PPARAMOUT, PAUTO:
+			if livenessShouldTrack(n) && n.Addrtaken() {
+				dtypesym(n.Type)
+				// Also make sure we allocate a linker symbol
+				// for the stack object data, for the same reason.
+				if fn.Func.lsym.Func.StackObjects == nil {
+					fn.Func.lsym.Func.StackObjects = lookup(fmt.Sprintf("%s.stkobj", fn.funcname())).Linksym()
 				}
 			}
 		}
@@ -547,11 +553,9 @@ func createDwarfVars(fnsym *obj.LSym, fn *Func, automDecls []*Node) ([]*Node, []
 		decls, vars, selected = createSimpleVars(automDecls)
 	}
 
-	var dcl []*Node
+	dcl := automDecls
 	if fnsym.WasInlined() {
 		dcl = preInliningDcls(fnsym)
-	} else {
-		dcl = automDecls
 	}
 
 	// If optimization is enabled, the list above will typically be

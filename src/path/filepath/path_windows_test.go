@@ -529,6 +529,12 @@ func TestNTNamespaceSymlink(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpdir)
 
+	// Make sure tmpdir is not a symlink, otherwise tests will fail.
+	tmpdir, err = filepath.EvalSymlinks(tmpdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	vol := filepath.VolumeName(tmpdir)
 	output, err = exec.Command("cmd", "/c", "mountvol", vol, "/L").CombinedOutput()
 	if err != nil {
@@ -549,6 +555,9 @@ func TestNTNamespaceSymlink(t *testing.T) {
 	if want := vol + `\`; got != want {
 		t.Errorf(`EvalSymlinks(%q): got %q, want %q`, dirlink, got, want)
 	}
+
+	// Make sure we have sufficient privilege to run mklink command.
+	testenv.MustHaveSymlink(t)
 
 	file := filepath.Join(tmpdir, "file")
 	err = ioutil.WriteFile(file, []byte(""), 0666)
