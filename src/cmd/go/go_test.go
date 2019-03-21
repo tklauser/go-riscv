@@ -4947,14 +4947,14 @@ func TestTestRegexps(t *testing.T) {
     x_test.go:15: LOG: Y running N=10000
     x_test.go:15: LOG: Y running N=1000000
     x_test.go:15: LOG: Y running N=100000000
-    x_test.go:15: LOG: Y running N=2000000000
+    x_test.go:15: LOG: Y running N=1000000000
 --- BENCH: BenchmarkX/Y
     x_test.go:15: LOG: Y running N=1
     x_test.go:15: LOG: Y running N=100
     x_test.go:15: LOG: Y running N=10000
     x_test.go:15: LOG: Y running N=1000000
     x_test.go:15: LOG: Y running N=100000000
-    x_test.go:15: LOG: Y running N=2000000000
+    x_test.go:15: LOG: Y running N=1000000000
 --- BENCH: BenchmarkX
     x_test.go:13: LOG: X running N=1
 --- BENCH: BenchmarkXX
@@ -5970,7 +5970,7 @@ func TestBadCgoDirectives(t *testing.T) {
 	if runtime.Compiler == "gc" {
 		tg.runFail("build", tg.path("src/x/_cgo_yy.go")) // ... but if forced, the comment is rejected
 		// Actually, today there is a separate issue that _ files named
-		// on the command-line are ignored. Once that is fixed,
+		// on the command line are ignored. Once that is fixed,
 		// we want to see the cgo_ldflag error.
 		tg.grepStderr("//go:cgo_ldflag only allowed in cgo-generated code|no Go files", "did not reject //go:cgo_ldflag directive")
 	}
