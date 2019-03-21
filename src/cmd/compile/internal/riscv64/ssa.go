@@ -183,15 +183,7 @@ func largestMove(alignment int64) (obj.As, int64) {
 func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {}
 
 func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
-	s.SetPos(v.Pos)
-
 	switch v.Op {
-	case ssa.OpInitMem:
-		// memory arg needs no code
-	case ssa.OpArg:
-		// input args need no code
-	case ssa.OpPhi:
-		gc.CheckLoweredPhi(v)
 	case ssa.OpCopy, ssa.OpRISCV64MOVconvert:
 		if v.Type.IsMemory() {
 			return
