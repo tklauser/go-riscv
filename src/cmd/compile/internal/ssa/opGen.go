@@ -1148,9 +1148,10 @@ const (
 
 	OpARM64ADCSflags
 	OpARM64ADCzerocarry
-	OpARM64ADDSconstflags
 	OpARM64ADD
 	OpARM64ADDconst
+	OpARM64ADDSconstflags
+	OpARM64ADDSflags
 	OpARM64SUB
 	OpARM64SUBconst
 	OpARM64MUL
@@ -2237,6 +2238,9 @@ const (
 	OpWasmI64TruncF64U
 	OpWasmF64ConvertI64S
 	OpWasmF64ConvertI64U
+	OpWasmI64Extend8S
+	OpWasmI64Extend16S
+	OpWasmI64Extend32S
 	OpWasmF64Sqrt
 	OpWasmF64Trunc
 	OpWasmF64Ceil
@@ -15271,21 +15275,6 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "ADDSconstflags",
-		auxType: auxInt64,
-		argLen:  1,
-		asm:     arm64.AADDS,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 805044223}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 g R30
-			},
-			outputs: []outputInfo{
-				{1, 0},
-				{0, 670826495}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 R30
-			},
-		},
-	},
-	{
 		name:        "ADD",
 		argLen:      2,
 		commutative: true,
@@ -15310,6 +15299,37 @@ var opcodeTable = [...]opInfo{
 				{0, 1878786047}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 g R30 SP
 			},
 			outputs: []outputInfo{
+				{0, 670826495}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 R30
+			},
+		},
+	},
+	{
+		name:    "ADDSconstflags",
+		auxType: auxInt64,
+		argLen:  1,
+		asm:     arm64.AADDS,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 805044223}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 g R30
+			},
+			outputs: []outputInfo{
+				{1, 0},
+				{0, 670826495}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 R30
+			},
+		},
+	},
+	{
+		name:        "ADDSflags",
+		argLen:      2,
+		commutative: true,
+		asm:         arm64.AADDS,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 670826495}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 R30
+				{1, 670826495}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 R30
+			},
+			outputs: []outputInfo{
+				{1, 0},
 				{0, 670826495}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R19 R20 R21 R22 R23 R24 R25 R26 R30
 			},
 		},
@@ -30136,6 +30156,45 @@ var opcodeTable = [...]opInfo{
 			},
 			outputs: []outputInfo{
 				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
+			},
+		},
+	},
+	{
+		name:   "I64Extend8S",
+		argLen: 1,
+		asm:    wasm.AI64Extend8S,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
+			},
+			outputs: []outputInfo{
+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
+			},
+		},
+	},
+	{
+		name:   "I64Extend16S",
+		argLen: 1,
+		asm:    wasm.AI64Extend16S,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
+			},
+			outputs: []outputInfo{
+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
+			},
+		},
+	},
+	{
+		name:   "I64Extend32S",
+		argLen: 1,
+		asm:    wasm.AI64Extend32S,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
+			},
+			outputs: []outputInfo{
+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
 			},
 		},
 	},

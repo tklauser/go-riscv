@@ -3758,7 +3758,7 @@ func sigprof(pc, sp, lr uintptr, gp *g, mp *m) {
 		// Normal traceback is impossible or has failed.
 		// See if it falls into several common cases.
 		n = 0
-		if (GOOS == "windows" || GOOS == "solaris" || GOOS == "darwin") && mp.libcallg != 0 && mp.libcallpc != 0 && mp.libcallsp != 0 {
+		if (GOOS == "windows" || GOOS == "solaris" || GOOS == "darwin" || GOOS == "aix") && mp.libcallg != 0 && mp.libcallpc != 0 && mp.libcallsp != 0 {
 			// Libcall, i.e. runtime syscall on windows.
 			// Collect Go stack that leads to the call.
 			n = gentraceback(mp.libcallpc, mp.libcallsp, 0, mp.libcallg.ptr(), 0, &stk[0], len(stk), nil, nil, 0)
@@ -3956,12 +3956,12 @@ func procresize(nprocs int32) *p {
 				pp.mcache = allocmcache()
 			}
 		}
-		if raceenabled && pp.racectx == 0 {
+		if raceenabled && pp.raceprocctx == 0 {
 			if old == 0 && i == 0 {
-				pp.racectx = raceprocctx0
+				pp.raceprocctx = raceprocctx0
 				raceprocctx0 = 0 // bootstrap
 			} else {
-				pp.racectx = raceproccreate()
+				pp.raceprocctx = raceproccreate()
 			}
 		}
 	}
@@ -4019,8 +4019,8 @@ func procresize(nprocs int32) *p {
 		gfpurge(p)
 		traceProcFree(p)
 		if raceenabled {
-			raceprocdestroy(p.racectx)
-			p.racectx = 0
+			raceprocdestroy(p.raceprocctx)
+			p.raceprocctx = 0
 		}
 		p.gcAssistTime = 0
 		p.status = _Pdead

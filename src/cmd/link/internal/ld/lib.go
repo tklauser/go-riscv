@@ -179,7 +179,7 @@ func (ctxt *Link) CanUsePlugins() bool {
 func (ctxt *Link) UseRelro() bool {
 	switch ctxt.BuildMode {
 	case BuildModeCArchive, BuildModeCShared, BuildModeShared, BuildModePIE, BuildModePlugin:
-		return ctxt.IsELF
+		return ctxt.IsELF || ctxt.HeadType == objabi.Haix
 	default:
 		return ctxt.linkShared || (ctxt.HeadType == objabi.Haix && ctxt.LinkMode == LinkExternal)
 	}
@@ -200,6 +200,10 @@ var (
 
 	nerrors  int
 	liveness int64
+
+	// See -strictdups command line flag.
+	checkStrictDups   int // 0=off 1=warning 2=error
+	strictDupMsgCount int
 )
 
 var (
@@ -281,6 +285,9 @@ func libinit(ctxt *Link) {
 
 func errorexit() {
 	if nerrors != 0 {
+		Exit(2)
+	}
+	if checkStrictDups > 1 && strictDupMsgCount > 0 {
 		Exit(2)
 	}
 	Exit(0)
@@ -453,18 +460,23 @@ func (ctxt *Link) loadlib() {
 		}
 	}
 
-	tlsg := ctxt.Syms.Lookup("runtime.tlsg", 0)
+	// The Android Q linker started to complain about underalignment of the our TLS
+	// section. We don't actually use the section on android, so dont't
+	// generate it.
+	if objabi.GOOS != "android" {
+		tlsg := ctxt.Syms.Lookup("runtime.tlsg", 0)
 
-	// runtime.tlsg is used for external linking on platforms that do not define
-	// a variable to hold g in assembly (currently only intel).
-	if tlsg.Type == 0 {
-		tlsg.Type = sym.STLSBSS
-		tlsg.Size = int64(ctxt.Arch.PtrSize)
-	} else if tlsg.Type != sym.SDYNIMPORT {
-		Errorf(nil, "runtime declared tlsg variable %v", tlsg.Type)
+		// runtime.tlsg is used for external linking on platforms that do not define
+		// a variable to hold g in assembly (currently only intel).
+		if tlsg.Type == 0 {
+			tlsg.Type = sym.STLSBSS
+			tlsg.Size = int64(ctxt.Arch.PtrSize)
+		} else if tlsg.Type != sym.SDYNIMPORT {
+			Errorf(nil, "runtime declared tlsg variable %v", tlsg.Type)
+		}
+		tlsg.Attr |= sym.AttrReachable
+		ctxt.Tlsg = tlsg
 	}
-	tlsg.Attr |= sym.AttrReachable
-	ctxt.Tlsg = tlsg
 
 	var moduledata *sym.Symbol
 	if ctxt.BuildMode == BuildModePlugin {
@@ -1097,7 +1109,11 @@ func (ctxt *Link) archive() {
 	}
 	ctxt.Out.f = nil
 
-	argv := []string{*flagExtar, "-q", "-c", "-s", *flagOutfile}
+	argv := []string{*flagExtar, "-q", "-c", "-s"}
+	if ctxt.HeadType == objabi.Haix {
+		argv = append(argv, "-X64")
+	}
+	argv = append(argv, *flagOutfile)
 	argv = append(argv, filepath.Join(*flagTmpdir, "go.o"))
 	argv = append(argv, hostobjCopy()...)
 
@@ -1173,7 +1189,7 @@ func (ctxt *Link) hostlink() {
 		}
 	case BuildModePIE:
 		// ELF.
-		if ctxt.HeadType != objabi.Hdarwin {
+		if ctxt.HeadType != objabi.Hdarwin && ctxt.HeadType != objabi.Haix {
 			if ctxt.UseRelro() {
 				argv = append(argv, "-Wl,-z,relro")
 			}
@@ -1725,7 +1741,19 @@ func ldobj(ctxt *Link, f *bio.Reader, lib *sym.Library, length int64, pn string,
 	ldpkg(ctxt, f, lib, import1-import0-2, pn) // -2 for !\n
 	f.Seek(import1, 0)
 
-	objfile.Load(ctxt.Arch, ctxt.Syms, f, lib, eof-f.Offset(), pn)
+	flags := 0
+	switch *FlagStrictDups {
+	case 0:
+		break
+	case 1:
+		flags = objfile.StrictDupsWarnFlag
+	case 2:
+		flags = objfile.StrictDupsErrFlag
+	default:
+		log.Fatalf("invalid -strictdups flag value %d", *FlagStrictDups)
+	}
+	c := objfile.Load(ctxt.Arch, ctxt.Syms, f, lib, eof-f.Offset(), pn, flags)
+	strictDupMsgCount += c
 	addImports(ctxt, lib, pn)
 	return nil
 }

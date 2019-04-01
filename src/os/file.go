@@ -163,12 +163,19 @@ func (f *File) Write(b []byte) (n int, err error) {
 	return n, err
 }
 
+var errWriteAtInAppendMode = errors.New("os: invalid use of WriteAt on file opened with O_APPEND")
+
 // WriteAt writes len(b) bytes to the File starting at byte offset off.
 // It returns the number of bytes written and an error, if any.
 // WriteAt returns a non-nil error when n != len(b).
+//
+// If file was opened with the O_APPEND flag, WriteAt returns an error.
 func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 	if err := f.checkValid("write"); err != nil {
 		return 0, err
+	}
+	if f.appendMode {
+		return 0, errWriteAtInAppendMode
 	}
 
 	if off < 0 {
@@ -286,7 +293,13 @@ func Create(name string) (*File, error) {
 // If there is an error, it will be of type *PathError.
 func OpenFile(name string, flag int, perm FileMode) (*File, error) {
 	testlog.Open(name)
-	return openFileNolog(name, flag, perm)
+	f, err := openFileNolog(name, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	f.appendMode = flag&O_APPEND != 0
+
+	return f, nil
 }
 
 // lstat is overridden in tests.
@@ -455,8 +468,10 @@ func UserHomeDir() (string, error) {
 	}
 	// On some geese the home directory is not always defined.
 	switch runtime.GOOS {
-	case "nacl", "android":
+	case "nacl":
 		return "/", nil
+	case "android":
+		return "/sdcard", nil
 	case "darwin":
 		if runtime.GOARCH == "arm" || runtime.GOARCH == "arm64" {
 			return "/", nil

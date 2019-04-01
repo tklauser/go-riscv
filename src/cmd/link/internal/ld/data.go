@@ -218,9 +218,7 @@ func relocsym(ctxt *Link, s *sym.Symbol) {
 				Errorf(s, "unknown reloc to %v: %d (%s)", r.Sym.Name, r.Type, sym.RelocName(ctxt.Arch, r.Type))
 			}
 		case objabi.R_TLS_LE:
-			isAndroidX86 := objabi.GOOS == "android" && (ctxt.Arch.InFamily(sys.AMD64, sys.I386))
-
-			if ctxt.LinkMode == LinkExternal && ctxt.IsELF && !isAndroidX86 {
+			if ctxt.LinkMode == LinkExternal && ctxt.IsELF {
 				r.Done = false
 				if r.Sym == nil {
 					r.Sym = ctxt.Tlsg
@@ -243,7 +241,7 @@ func relocsym(ctxt *Link, s *sym.Symbol) {
 				// related to the fact that our own TLS storage happens
 				// to take up 8 bytes.
 				o = 8 + r.Sym.Value
-			} else if ctxt.IsELF || ctxt.HeadType == objabi.Hplan9 || ctxt.HeadType == objabi.Hdarwin || isAndroidX86 {
+			} else if ctxt.IsELF || ctxt.HeadType == objabi.Hplan9 || ctxt.HeadType == objabi.Hdarwin {
 				o = int64(ctxt.Tlsoffset) + r.Add
 			} else if ctxt.HeadType == objabi.Hwindows {
 				o = r.Add
@@ -251,9 +249,7 @@ func relocsym(ctxt *Link, s *sym.Symbol) {
 				log.Fatalf("unexpected R_TLS_LE relocation for %v", ctxt.HeadType)
 			}
 		case objabi.R_TLS_IE:
-			isAndroidX86 := objabi.GOOS == "android" && (ctxt.Arch.InFamily(sys.AMD64, sys.I386))
-
-			if ctxt.LinkMode == LinkExternal && ctxt.IsELF && !isAndroidX86 {
+			if ctxt.LinkMode == LinkExternal && ctxt.IsELF {
 				r.Done = false
 				if r.Sym == nil {
 					r.Sym = ctxt.Tlsg
@@ -1000,7 +996,7 @@ func dosymtype(ctxt *Link) {
 		for _, s := range ctxt.Syms.Allsym {
 			// Create a new entry in the .init_array section that points to the
 			// library initializer function.
-			if s.Name == *flagEntrySymbol {
+			if s.Name == *flagEntrySymbol && ctxt.HeadType != objabi.Haix {
 				addinitarrdata(ctxt, s)
 			}
 		}
@@ -1380,6 +1376,13 @@ func (ctxt *Link) dodata() {
 	case BuildModeCArchive, BuildModeCShared, BuildModeShared, BuildModePlugin:
 		hasinitarr = true
 	}
+
+	if ctxt.HeadType == objabi.Haix {
+		if len(data[sym.SINITARR]) > 0 {
+			Errorf(nil, "XCOFF format doesn't allow .init_array section")
+		}
+	}
+
 	if hasinitarr && len(data[sym.SINITARR]) > 0 {
 		sect := addsection(ctxt.Arch, &Segdata, ".init_array", 06)
 		sect.Align = dataMaxAlign[sym.SINITARR]
