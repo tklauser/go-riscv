@@ -169,12 +169,13 @@ func syscall0(fn *libFunc) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &mp.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 0
-	c.args = uintptr(noescape(unsafe.Pointer(&fn))) // it's unused but must be non-nil, otherwise crashes
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    0,
+		args: uintptr(unsafe.Pointer(&fn)), // it's unused but must be non-nil, otherwise crashes
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -199,12 +200,13 @@ func syscall1(fn *libFunc, a0 uintptr) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &gp.m.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 1
-	c.args = uintptr(noescape(unsafe.Pointer(&a0)))
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    1,
+		args: uintptr(unsafe.Pointer(&a0)),
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -215,6 +217,7 @@ func syscall1(fn *libFunc, a0 uintptr) (r, err uintptr) {
 
 //go:nowritebarrier
 //go:nosplit
+//go:cgo_unsafe_args
 func syscall2(fn *libFunc, a0, a1 uintptr) (r, err uintptr) {
 	gp := getg()
 	mp := gp.m
@@ -229,12 +232,13 @@ func syscall2(fn *libFunc, a0, a1 uintptr) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &gp.m.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 2
-	c.args = uintptr(noescape(unsafe.Pointer(&a0)))
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    2,
+		args: uintptr(unsafe.Pointer(&a0)),
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -245,6 +249,7 @@ func syscall2(fn *libFunc, a0, a1 uintptr) (r, err uintptr) {
 
 //go:nowritebarrier
 //go:nosplit
+//go:cgo_unsafe_args
 func syscall3(fn *libFunc, a0, a1, a2 uintptr) (r, err uintptr) {
 	gp := getg()
 	mp := gp.m
@@ -259,12 +264,13 @@ func syscall3(fn *libFunc, a0, a1, a2 uintptr) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &gp.m.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 3
-	c.args = uintptr(noescape(unsafe.Pointer(&a0)))
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    3,
+		args: uintptr(unsafe.Pointer(&a0)),
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -275,6 +281,7 @@ func syscall3(fn *libFunc, a0, a1, a2 uintptr) (r, err uintptr) {
 
 //go:nowritebarrier
 //go:nosplit
+//go:cgo_unsafe_args
 func syscall4(fn *libFunc, a0, a1, a2, a3 uintptr) (r, err uintptr) {
 	gp := getg()
 	mp := gp.m
@@ -289,12 +296,13 @@ func syscall4(fn *libFunc, a0, a1, a2, a3 uintptr) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &gp.m.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 4
-	c.args = uintptr(noescape(unsafe.Pointer(&a0)))
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    4,
+		args: uintptr(unsafe.Pointer(&a0)),
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -305,6 +313,7 @@ func syscall4(fn *libFunc, a0, a1, a2, a3 uintptr) (r, err uintptr) {
 
 //go:nowritebarrier
 //go:nosplit
+//go:cgo_unsafe_args
 func syscall5(fn *libFunc, a0, a1, a2, a3, a4 uintptr) (r, err uintptr) {
 	gp := getg()
 	mp := gp.m
@@ -319,12 +328,13 @@ func syscall5(fn *libFunc, a0, a1, a2, a3, a4 uintptr) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &gp.m.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 5
-	c.args = uintptr(noescape(unsafe.Pointer(&a0)))
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    5,
+		args: uintptr(unsafe.Pointer(&a0)),
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -335,6 +345,7 @@ func syscall5(fn *libFunc, a0, a1, a2, a3, a4 uintptr) (r, err uintptr) {
 
 //go:nowritebarrier
 //go:nosplit
+//go:cgo_unsafe_args
 func syscall6(fn *libFunc, a0, a1, a2, a3, a4, a5 uintptr) (r, err uintptr) {
 	gp := getg()
 	mp := gp.m
@@ -349,12 +360,13 @@ func syscall6(fn *libFunc, a0, a1, a2, a3, a4, a5 uintptr) (r, err uintptr) {
 		resetLibcall = false // See comment in sys_darwin.go:libcCall
 	}
 
-	c := &gp.m.libcall
-	c.fn = uintptr(unsafe.Pointer(fn))
-	c.n = 6
-	c.args = uintptr(noescape(unsafe.Pointer(&a0)))
+	c := libcall{
+		fn:   uintptr(unsafe.Pointer(fn)),
+		n:    6,
+		args: uintptr(unsafe.Pointer(&a0)),
+	}
 
-	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(c))
+	asmcgocall(unsafe.Pointer(&asmsyscall6), unsafe.Pointer(&c))
 
 	if resetLibcall {
 		mp.libcallsp = 0
@@ -424,8 +436,11 @@ func pipe(fd *int32) int32 {
 // by the assembly routine as 0.
 // The err result is an OS error code such as ENOMEM.
 //go:nosplit
-func mmap(addr unsafe.Pointer, n uintptr, prot, flags, fd int32, off uint32) (p unsafe.Pointer, err int) {
+func mmap(addr unsafe.Pointer, n uintptr, prot, flags, fd int32, off uint32) (unsafe.Pointer, int) {
 	r, err0 := syscall6(&libc_mmap, uintptr(addr), uintptr(n), uintptr(prot), uintptr(flags), uintptr(fd), uintptr(off))
+	if r == ^uintptr(0) {
+		return nil, int(err0)
+	}
 	return unsafe.Pointer(r), int(err0)
 }
 

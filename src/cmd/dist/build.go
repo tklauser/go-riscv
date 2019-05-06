@@ -80,6 +80,7 @@ var okgoarch = []string{
 var okgoos = []string{
 	"darwin",
 	"dragonfly",
+	"illumos",
 	"js",
 	"linux",
 	"android",
@@ -198,6 +199,7 @@ func xinit() {
 	}
 
 	gogcflags = os.Getenv("BOOT_GO_GCFLAGS")
+	goldflags = os.Getenv("BOOT_GO_LDFLAGS")
 
 	cc, cxx := "gcc", "g++"
 	if defaultclang {
@@ -657,7 +659,15 @@ func runInstall(dir string, ch chan struct{}) {
 		if elem == "go" {
 			elem = "go_bootstrap"
 		}
-		link = []string{pathf("%s/link", tooldir), "-o", pathf("%s/%s%s", tooldir, elem, exe)}
+		link = []string{pathf("%s/link", tooldir)}
+		if goos == "android" {
+			link = append(link, "-buildmode=pie")
+		}
+		if goldflags != "" {
+			link = append(link, goldflags)
+		}
+		link = append(link, "-extld="+compilerEnvLookup(defaultcc, goos, goarch))
+		link = append(link, "-o", pathf("%s/%s%s", tooldir, elem, exe))
 		targ = len(link) - 1
 	}
 	ttarg := mtime(link[targ])
@@ -862,6 +872,9 @@ func runInstall(dir string, ch chan struct{}) {
 		// compiler to generate ABI wrappers for everything.
 		compile = append(compile, "-allabis")
 	}
+	if goos == "android" {
+		compile = append(compile, "-shared")
+	}
 
 	compile = append(compile, gofiles...)
 	var wg sync.WaitGroup
@@ -925,7 +938,7 @@ func matchtag(tag string) bool {
 		}
 		return !matchtag(tag[1:])
 	}
-	return tag == "gc" || tag == goos || tag == goarch || tag == "cmd_go_bootstrap" || tag == "go1.1" || (goos == "android" && tag == "linux")
+	return tag == "gc" || tag == goos || tag == goarch || tag == "cmd_go_bootstrap" || tag == "go1.1" || (goos == "android" && tag == "linux") || (goos == "illumos" && tag == "solaris")
 }
 
 // shouldbuild reports whether we should build this file.
@@ -939,7 +952,7 @@ func shouldbuild(file, dir string) bool {
 	name := filepath.Base(file)
 	excluded := func(list []string, ok string) bool {
 		for _, x := range list {
-			if x == ok || ok == "android" && x == "linux" {
+			if x == ok || (ok == "android" && x == "linux") || (ok == "illumos" && x == "solaris") {
 				continue
 			}
 			i := strings.Index(name, x)
@@ -1258,7 +1271,7 @@ func cmdbootstrap() {
 	}
 
 	gogcflags = os.Getenv("GO_GCFLAGS") // we were using $BOOT_GO_GCFLAGS until now
-	goldflags = os.Getenv("GO_LDFLAGS")
+	goldflags = os.Getenv("GO_LDFLAGS") // we were using $BOOT_GO_LDFLAGS until now
 	goBootstrap := pathf("%s/go_bootstrap", tooldir)
 	cmdGo := pathf("%s/go", gobin)
 	if debug {
@@ -1414,9 +1427,13 @@ func cmdbootstrap() {
 func wrapperPathFor(goos, goarch string) string {
 	switch {
 	case goos == "android":
-		return pathf("%s/misc/android/go_android_exec.go", goroot)
+		if gohostos != "android" {
+			return pathf("%s/misc/android/go_android_exec.go", goroot)
+		}
 	case goos == "darwin" && (goarch == "arm" || goarch == "arm64"):
-		return pathf("%s/misc/ios/go_darwin_arm_exec.go", goroot)
+		if gohostos != "darwin" || (gohostarch != "arm" && gohostarch != "arm64") {
+			return pathf("%s/misc/ios/go_darwin_arm_exec.go", goroot)
+		}
 	}
 	return ""
 }
@@ -1467,14 +1484,15 @@ func checkNotStale(goBinary string, targets ...string) {
 // by 'go tool dist list'.
 var cgoEnabled = map[string]bool{
 	"aix/ppc64":       true,
-	"darwin/386":      true,
+	"darwin/386":      false, // Issue 31751
 	"darwin/amd64":    true,
 	"darwin/arm":      true,
 	"darwin/arm64":    true,
 	"dragonfly/amd64": true,
 	"freebsd/386":     true,
 	"freebsd/amd64":   true,
-	"freebsd/arm":     false,
+	"freebsd/arm":     true,
+	"illumos/amd64":   true,
 	"linux/386":       true,
 	"linux/amd64":     true,
 	"linux/arm":       true,
@@ -1499,9 +1517,11 @@ var cgoEnabled = map[string]bool{
 	"netbsd/386":      true,
 	"netbsd/amd64":    true,
 	"netbsd/arm":      true,
+	"netbsd/arm64":    true,
 	"openbsd/386":     true,
 	"openbsd/amd64":   true,
 	"openbsd/arm":     true,
+	"openbsd/arm64":   true,
 	"plan9/386":       false,
 	"plan9/amd64":     false,
 	"plan9/arm":       false,

@@ -92,6 +92,8 @@
 (Trunc x) -> (FRINTZD x)
 
 // lowering rotates
+(RotateLeft8 <t> x (MOVDconst [c])) -> (Or8 (Lsh8x64 <t> x (MOVDconst [c&7])) (Rsh8Ux64 <t> x (MOVDconst [-c&7])))
+(RotateLeft16 <t> x (MOVDconst [c])) -> (Or16 (Lsh16x64 <t> x (MOVDconst [c&15])) (Rsh16Ux64 <t> x (MOVDconst [-c&15])))
 (RotateLeft32 x y) -> (RORW x (NEG <y.Type> y))
 (RotateLeft64 x y) -> (ROR x (NEG <y.Type> y))
 
@@ -147,6 +149,10 @@
 // 64-bit addition with carry.
 (Select0 (Add64carry x y c)) -> (Select0 <typ.UInt64> (ADCSflags x y (Select1 <types.TypeFlags> (ADDSconstflags [-1] c))))
 (Select1 (Add64carry x y c)) -> (ADCzerocarry <typ.UInt64> (Select1 <types.TypeFlags> (ADCSflags x y (Select1 <types.TypeFlags> (ADDSconstflags [-1] c)))))
+
+// 64-bit subtraction with borrowing.
+(Select0 (Sub64borrow x y bo)) -> (Select0 <typ.UInt64> (SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags bo))))
+(Select1 (Sub64borrow x y bo)) -> (NEG <typ.UInt64> (NGCzerocarry <typ.UInt64> (Select1 <types.TypeFlags> (SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags bo))))))
 
 // boolean ops -- booleans are represented with 0=false, 1=true
 (AndB x y) -> (AND x y)
@@ -577,6 +583,7 @@
 
 // atomic intrinsics
 // Note: these ops do not accept offset.
+(AtomicLoad8   ptr mem) -> (LDARB ptr mem)
 (AtomicLoad32  ptr mem) -> (LDARW ptr mem)
 (AtomicLoad64  ptr mem) -> (LDAR  ptr mem)
 (AtomicLoadPtr ptr mem) -> (LDAR  ptr mem)
@@ -1206,9 +1213,11 @@
 (ADD a l:(MNEGW x y)) && a.Type.Size() != 8 && l.Uses==1 && clobber(l) -> (MSUBW a x y)
 (SUB a l:(MNEGW x y)) && a.Type.Size() != 8 && l.Uses==1 && clobber(l) -> (MADDW a x y)
 
-// optimize ADCSflags and friends
+// optimize ADCSflags, SBCSflags and friends
 (ADCSflags x y (Select1 <types.TypeFlags> (ADDSconstflags [-1] (ADCzerocarry <typ.UInt64> c)))) -> (ADCSflags x y c)
 (ADCSflags x y (Select1 <types.TypeFlags> (ADDSconstflags [-1] (MOVDconst [0])))) -> (ADDSflags x y)
+(SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags (NEG <typ.UInt64> (NGCzerocarry <typ.UInt64> bo))))) -> (SBCSflags x y bo)
+(SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags (MOVDconst [0])))) -> (SUBSflags x y)
 
 // mul by constant
 (MUL x (MOVDconst [-1])) -> (NEG x)

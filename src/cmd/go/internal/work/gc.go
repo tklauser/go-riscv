@@ -21,6 +21,7 @@ import (
 	"cmd/go/internal/load"
 	"cmd/go/internal/str"
 	"cmd/internal/objabi"
+	"cmd/internal/sys"
 	"crypto/sha1"
 )
 
@@ -116,7 +117,7 @@ func (gcToolchain) gc(b *Builder, a *Action, archive string, importcfg []byte, s
 		}
 	}
 
-	args := []interface{}{cfg.BuildToolexec, base.Tool("compile"), "-o", ofile, "-trimpath", trimDir(a.Objdir), gcflags, gcargs, "-D", p.Internal.LocalPrefix}
+	args := []interface{}{cfg.BuildToolexec, base.Tool("compile"), "-o", ofile, "-trimpath", a.trimpath(), gcflags, gcargs, "-D", p.Internal.LocalPrefix}
 	if importcfg != nil {
 		if err := b.writeFile(objdir+"importcfg", importcfg); err != nil {
 			return "", nil, err
@@ -214,17 +215,33 @@ CheckFlags:
 	return c
 }
 
-func trimDir(dir string) string {
-	if len(dir) > 1 && dir[len(dir)-1] == filepath.Separator {
-		dir = dir[:len(dir)-1]
+// trimpath returns the -trimpath argument to use
+// when compiling the action.
+func (a *Action) trimpath() string {
+	// Strip the object directory entirely.
+	objdir := a.Objdir
+	if len(objdir) > 1 && objdir[len(objdir)-1] == filepath.Separator {
+		objdir = objdir[:len(objdir)-1]
 	}
-	return dir
+	rewrite := objdir + "=>"
+
+	// For "go build -trimpath", rewrite package source directory
+	// to a file system-independent path (just the import path).
+	if cfg.BuildTrimpath {
+		if m := a.Package.Module; m != nil {
+			rewrite += ";" + m.Dir + "=>" + m.Path + "@" + m.Version
+		} else {
+			rewrite += ";" + a.Package.Dir + "=>" + a.Package.ImportPath
+		}
+	}
+
+	return rewrite
 }
 
 func asmArgs(a *Action, p *load.Package) []interface{} {
 	// Add -I pkg/GOOS_GOARCH so #include "textflag.h" works in .s files.
 	inc := filepath.Join(cfg.GOROOT, "pkg", "include")
-	args := []interface{}{cfg.BuildToolexec, base.Tool("asm"), "-trimpath", trimDir(a.Objdir), "-I", a.Objdir, "-I", inc, "-D", "GOOS_" + cfg.Goos, "-D", "GOARCH_" + cfg.Goarch, forcedAsmflags, p.Internal.Asmflags}
+	args := []interface{}{cfg.BuildToolexec, base.Tool("asm"), "-trimpath", a.trimpath(), "-I", a.Objdir, "-I", inc, "-D", "GOOS_" + cfg.Goos, "-D", "GOARCH_" + cfg.Goarch, forcedAsmflags, p.Internal.Asmflags}
 	if p.ImportPath == "runtime" && cfg.Goarch == "386" {
 		for _, arg := range forcedAsmflags {
 			if arg == "-dynlink" {
@@ -525,7 +542,13 @@ func (gcToolchain) ld(b *Builder, root *Action, out, importcfg, mainpkg string) 
 	// Store BuildID inside toolchain binaries as a unique identifier of the
 	// tool being run, for use by content-based staleness determination.
 	if root.Package.Goroot && strings.HasPrefix(root.Package.ImportPath, "cmd/") {
-		ldflags = append(ldflags, "-X=cmd/internal/objabi.buildID="+root.buildID)
+		// External linking will include our build id in the external
+		// linker's build id, which will cause our build id to not
+		// match the next time the tool is built.
+		// Rely on the external build id instead.
+		if !sys.MustLinkExternal(cfg.Goos, cfg.Goarch) {
+			ldflags = append(ldflags, "-X=cmd/internal/objabi.buildID="+root.buildID)
+		}
 	}
 
 	// If the user has not specified the -extld option, then specify the
@@ -560,7 +583,11 @@ func (gcToolchain) ld(b *Builder, root *Action, out, importcfg, mainpkg string) 
 		dir, out = filepath.Split(out)
 	}
 
-	return b.run(root, dir, root.Package.ImportPath, nil, cfg.BuildToolexec, base.Tool("link"), "-o", out, "-importcfg", importcfg, ldflags, mainpkg)
+	env := []string{}
+	if cfg.BuildTrimpath {
+		env = append(env, "GOROOT_FINAL=go")
+	}
+	return b.run(root, dir, root.Package.ImportPath, env, cfg.BuildToolexec, base.Tool("link"), "-o", out, "-importcfg", importcfg, ldflags, mainpkg)
 }
 
 func (gcToolchain) ldShared(b *Builder, root *Action, toplevelactions []*Action, out, importcfg string, allactions []*Action) error {

@@ -23,6 +23,7 @@
 // (x + y) / 2 with x>=y -> (x - y) / 2 + y
 (Avg64u <t> x y) -> (ADD (SRDconst <t> (SUB <t> x y) [1]) y)
 
+(Add64carry x y c) -> (LoweredAdd64Carry x y c)
 (Mul64  x y) -> (MULLD  x y)
 (Mul(32|16|8)  x y) -> (MULLW  x y)
 (Mul64uhilo x y) -> (LoweredMuluhilo x y)
@@ -80,6 +81,12 @@
 (FFLOOR (FMOVDconst [x])) -> (FMOVDconst [auxFrom64F(math.Floor(auxTo64F(x)))])
 (FCEIL (FMOVDconst [x])) -> (FMOVDconst [auxFrom64F(math.Ceil(auxTo64F(x)))])
 (FTRUNC (FMOVDconst [x])) -> (FMOVDconst [auxFrom64F(math.Trunc(auxTo64F(x)))])
+
+// Rotates
+(RotateLeft8 <t> x (MOVDconst [c])) -> (Or8 (Lsh8x64 <t> x (MOVDconst [c&7])) (Rsh8Ux64 <t> x (MOVDconst [-c&7])))
+(RotateLeft16 <t> x (MOVDconst [c])) -> (Or16 (Lsh16x64 <t> x (MOVDconst [c&15])) (Rsh16Ux64 <t> x (MOVDconst [-c&15])))
+(RotateLeft32 x (MOVDconst [c])) -> (ROTLWconst [c&31] x)
+(RotateLeft64 x (MOVDconst [c])) -> (ROTLconst [c&63] x)
 
 // Rotate generation with const shift
 (ADD (SLDconst x [c]) (SRDconst x [d])) && d == 64-c -> (ROTLconst [c] x)
@@ -917,7 +924,7 @@
     (MOVBstorezero [off1+off2] {mergeSym(sym1,sym2)} x mem)
 
 // atomic intrinsics
-(AtomicLoad(32|64|Ptr)  ptr mem) -> (LoweredAtomicLoad(32|64|Ptr) [1] ptr mem)
+(AtomicLoad(8|32|64|Ptr)  ptr mem) -> (LoweredAtomicLoad(8|32|64|Ptr) [1] ptr mem)
 (AtomicLoadAcq32        ptr mem) -> (LoweredAtomicLoad32 [0] ptr mem)
 
 (AtomicStore(32|64)      ptr val mem) -> (LoweredAtomicStore(32|64) [1] ptr val mem)

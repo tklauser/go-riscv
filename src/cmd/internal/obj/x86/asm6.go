@@ -961,7 +961,6 @@ var optab =
 	{ABSRL, yml_rl, Pm, opBytes{0xbd}},
 	{ABSRQ, yml_rl, Pw, opBytes{0x0f, 0xbd}},
 	{ABSRW, yml_rl, Pq, opBytes{0xbd}},
-	{ABSWAPW, ybswap, Pe, opBytes{0x0f, 0xc8}},
 	{ABSWAPL, ybswap, Px, opBytes{0x0f, 0xc8}},
 	{ABSWAPQ, ybswap, Pw, opBytes{0x0f, 0xc8}},
 	{ABTCL, ybtl, Pm, opBytes{0xba, 07, 0xbb}},
@@ -2345,17 +2344,14 @@ func prefixof(ctxt *obj.Link, a *obj.Addr) int {
 	if ctxt.Arch.Family == sys.I386 {
 		if a.Index == REG_TLS && ctxt.Flag_shared {
 			// When building for inclusion into a shared library, an instruction of the form
-			//     MOVL 0(CX)(TLS*1), AX
+			//     MOVL off(CX)(TLS*1), AX
 			// becomes
-			//     mov %gs:(%ecx), %eax
+			//     mov %gs:off(%ecx), %eax
 			// which assumes that the correct TLS offset has been loaded into %ecx (today
 			// there is only one TLS variable -- g -- so this is OK). When not building for
 			// a shared library the instruction it becomes
-			//     mov 0x0(%ecx), $eax
+			//     mov 0x0(%ecx), %eax
 			// and a R_TLS_LE relocation, and so does not require a prefix.
-			if a.Offset != 0 {
-				ctxt.Diag("cannot handle non-0 offsets to TLS")
-			}
 			return 0x65 // GS
 		}
 		return 0
@@ -2374,15 +2370,12 @@ func prefixof(ctxt *obj.Link, a *obj.Addr) int {
 	case REG_TLS:
 		if ctxt.Flag_shared && ctxt.Headtype != objabi.Hwindows {
 			// When building for inclusion into a shared library, an instruction of the form
-			//     MOV 0(CX)(TLS*1), AX
+			//     MOV off(CX)(TLS*1), AX
 			// becomes
-			//     mov %fs:(%rcx), %rax
+			//     mov %fs:off(%rcx), %rax
 			// which assumes that the correct TLS offset has been loaded into %rcx (today
 			// there is only one TLS variable -- g -- so this is OK). When not building for
 			// a shared library the instruction does not require a prefix.
-			if a.Offset != 0 {
-				log.Fatalf("cannot handle non-0 offsets to TLS")
-			}
 			return 0x64
 		}
 
@@ -5121,7 +5114,6 @@ bad:
 	}
 
 	ctxt.Diag("invalid instruction: %v", p)
-	//	ctxt.Diag("doasm: notfound ft=%d tt=%d %v %d %d", p.Ft, p.Tt, p, oclass(ctxt, p, &p.From), oclass(ctxt, p, &p.To))
 }
 
 // byteswapreg returns a byte-addressable register (AX, BX, CX, DX)
@@ -5374,7 +5366,7 @@ func (ab *AsmBuf) asmins(ctxt *obj.Link, cursym *obj.LSym, p *obj.Prog) {
 		if int64(r.Off) < p.Pc {
 			break
 		}
-		if ab.rexflag != 0 && !ab.vexflag {
+		if ab.rexflag != 0 && !ab.vexflag && !ab.evexflag {
 			r.Off++
 		}
 		if r.Type == objabi.R_PCREL {

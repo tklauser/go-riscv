@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 )
 
@@ -259,7 +260,7 @@ func dumpglobls() {
 		}
 	}
 
-	obj.SortSlice(funcsyms, func(i, j int) bool {
+	sort.Slice(funcsyms, func(i, j int) bool {
 		return funcsyms[i].LinksymName() < funcsyms[j].LinksymName()
 	})
 	for _, s := range funcsyms {
@@ -287,7 +288,7 @@ func addGCLocals() {
 			}
 		}
 		if x := s.Func.StackObjects; x != nil {
-			ggloblsym(x, int32(len(x.P)), obj.RODATA|obj.LOCAL)
+			ggloblsym(x, int32(len(x.P)), obj.RODATA|obj.DUPOK)
 		}
 	}
 }

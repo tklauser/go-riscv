@@ -17,6 +17,7 @@ import (
 	"cmd/go/internal/modfetch/codehost"
 	"cmd/go/internal/par"
 	"cmd/go/internal/semver"
+	"cmd/go/internal/str"
 	web "cmd/go/internal/web"
 )
 
@@ -205,11 +206,14 @@ func lookup(path string) (r Repo, err error) {
 	if proxyURL == "off" {
 		return nil, fmt.Errorf("module lookup disabled by GOPROXY=%s", proxyURL)
 	}
-	if proxyURL != "" && proxyURL != "direct" {
+	if proxyURL != "" && proxyURL != "direct" && !str.GlobsMatchPath(cfg.GONOPROXY, path) {
 		return lookupProxy(path)
 	}
+	return lookupDirect(path)
+}
 
-	security := web.Secure
+func lookupDirect(path string) (Repo, error) {
+	security := web.SecureOnly
 	if get.Insecure {
 		security = web.Insecure
 	}
@@ -254,7 +258,7 @@ func ImportRepoRev(path, rev string) (Repo, *RevInfo, error) {
 	// Note: Because we are converting a code reference from a legacy
 	// version control system, we ignore meta tags about modules
 	// and use only direct source control entries (get.IgnoreMod).
-	security := web.Secure
+	security := web.SecureOnly
 	if get.Insecure {
 		security = web.Insecure
 	}

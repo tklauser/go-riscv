@@ -2094,7 +2094,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 			addop := ssa.OpAdd64F
 			subop := ssa.OpSub64F
 			pt := floatForComplex(n.Type) // Could be Float32 or Float64
-			wt := types.Types[TFLOAT64]   // Compute in Float64 to minimize cancelation error
+			wt := types.Types[TFLOAT64]   // Compute in Float64 to minimize cancellation error
 
 			areal := s.newValue1(ssa.OpComplexReal, pt, a)
 			breal := s.newValue1(ssa.OpComplexReal, pt, b)
@@ -2137,7 +2137,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 			subop := ssa.OpSub64F
 			divop := ssa.OpDiv64F
 			pt := floatForComplex(n.Type) // Could be Float32 or Float64
-			wt := types.Types[TFLOAT64]   // Compute in Float64 to minimize cancelation error
+			wt := types.Types[TFLOAT64]   // Compute in Float64 to minimize cancellation error
 
 			areal := s.newValue1(ssa.OpComplexReal, pt, a)
 			breal := s.newValue1(ssa.OpComplexReal, pt, b)
@@ -2276,7 +2276,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 	case OADDR:
 		return s.addr(n.Left, n.Bounded())
 
-	case OINDREGSP:
+	case ORESULT:
 		addr := s.constOffPtrSP(types.NewPtr(n.Type), n.Xoffset)
 		return s.load(n.Type, addr)
 
@@ -2732,6 +2732,8 @@ func (s *state) assign(left *Node, right *ssa.Value, deref bool, skip skipMask) 
 			return
 		}
 		if left.Op == OINDEX && left.Left.Type.IsArray() {
+			s.pushLine(left.Pos)
+			defer s.popLine()
 			// We're assigning to an element of an ssa-able array.
 			// a[i] = v
 			t := left.Left.Type
@@ -3071,6 +3073,13 @@ func init() {
 			return s.newValue1(ssa.OpSelect0, types.Types[TUINT32], v)
 		},
 		sys.AMD64, sys.ARM64, sys.S390X, sys.MIPS, sys.MIPS64, sys.PPC64)
+	addF("runtime/internal/atomic", "Load8",
+		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
+			v := s.newValue2(ssa.OpAtomicLoad8, types.NewTuple(types.Types[TUINT8], types.TypeMem), args[0], s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, types.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, types.Types[TUINT8], v)
+		},
+		sys.AMD64, sys.ARM64, sys.S390X, sys.MIPS64, sys.PPC64)
 	addF("runtime/internal/atomic", "Load64",
 		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
 			v := s.newValue2(ssa.OpAtomicLoad64, types.NewTuple(types.Types[TUINT64], types.TypeMem), args[0], s.mem())
@@ -3573,14 +3582,14 @@ func init() {
 		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
 			return s.newValue3(ssa.OpAdd64carry, types.NewTuple(types.Types[TUINT64], types.Types[TUINT64]), args[0], args[1], args[2])
 		},
-		sys.AMD64, sys.ARM64)
-	alias("math/bits", "Add", "math/bits", "Add64", sys.ArchAMD64, sys.ArchARM64)
+		sys.AMD64, sys.ARM64, sys.PPC64, sys.S390X)
+	alias("math/bits", "Add", "math/bits", "Add64", sys.ArchAMD64, sys.ArchARM64, sys.ArchPPC64, sys.ArchS390X)
 	addF("math/bits", "Sub64",
 		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
 			return s.newValue3(ssa.OpSub64borrow, types.NewTuple(types.Types[TUINT64], types.Types[TUINT64]), args[0], args[1], args[2])
 		},
-		sys.AMD64)
-	alias("math/bits", "Sub", "math/bits", "Sub64", sys.ArchAMD64)
+		sys.AMD64, sys.ARM64, sys.S390X)
+	alias("math/bits", "Sub", "math/bits", "Sub64", sys.ArchAMD64, sys.ArchARM64, sys.ArchS390X)
 	addF("math/bits", "Div64",
 		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
 			// check for divide-by-zero/overflow and panic with appropriate message
@@ -3894,6 +3903,11 @@ func etypesign(e types.EType) int8 {
 // If bounded is true then this address does not require a nil check for its operand
 // even if that would otherwise be implied.
 func (s *state) addr(n *Node, bounded bool) *ssa.Value {
+	if n.Op != ONAME {
+		s.pushLine(n.Pos)
+		defer s.popLine()
+	}
+
 	t := types.NewPtr(n.Type)
 	switch n.Op {
 	case ONAME:
@@ -3929,9 +3943,8 @@ func (s *state) addr(n *Node, bounded bool) *ssa.Value {
 			s.Fatalf("variable address class %v not implemented", n.Class())
 			return nil
 		}
-	case OINDREGSP:
-		// indirect off REGSP
-		// used for storing/loading arguments/returns to/from callees
+	case ORESULT:
+		// load return from callee
 		return s.constOffPtrSP(t, n.Xoffset)
 	case OINDEX:
 		if n.Left.Type.IsSlice() {
@@ -5335,6 +5348,13 @@ func genssa(f *ssa.Func, pp *Progs) {
 			}
 		}
 	}
+	if f.Blocks[len(f.Blocks)-1].Kind == ssa.BlockExit {
+		// We need the return address of a panic call to
+		// still be inside the function in question. So if
+		// it ends in a call which doesn't return, add a
+		// nop (which will never execute) after the call.
+		thearch.Ginsnop(pp)
+	}
 
 	if inlMarks != nil {
 		// We have some inline marks. Try to find other instructions we're
@@ -5363,6 +5383,7 @@ func genssa(f *ssa.Func, pp *Progs) {
 				// We found an instruction with the same source position as
 				// some of the inline marks.
 				// Use this instruction instead.
+				p.Pos = p.Pos.WithIsStmt() // promote position to a statement
 				pp.curfn.Func.lsym.Func.AddInlMark(p, inlMarks[m])
 				// Make the inline mark a real nop, so it doesn't generate any code.
 				m.As = obj.ANOP

@@ -289,10 +289,6 @@ func (v *hairyVisitor) visit(n *Node) bool {
 	switch n.Op {
 	// Call is okay if inlinable and we have the budget for the body.
 	case OCALLFUNC:
-		if isIntrinsicCall(n) {
-			v.budget--
-			break
-		}
 		// Functions that call runtime.getcaller{pc,sp} can not be inlined
 		// because getcaller{pc,sp} expect a pointer to the caller's first argument.
 		//
@@ -307,6 +303,11 @@ func (v *hairyVisitor) visit(n *Node) bool {
 				v.budget -= inlineExtraThrowCost
 				break
 			}
+		}
+
+		if isIntrinsicCall(n) {
+			v.budget--
+			break
 		}
 
 		if fn := n.Left.Func; fn != nil && fn.Inl != nil {
@@ -342,10 +343,6 @@ func (v *hairyVisitor) visit(n *Node) bool {
 				// runtime.heapBits.next even though
 				// it calls slow-path
 				// runtime.heapBits.nextArena.
-				//
-				// TODO(austin): Once mid-stack
-				// inlining is the default, remove
-				// this special case.
 				break
 			}
 		}
@@ -1054,7 +1051,7 @@ func mkinlcall(n, fn *Node, maxCost int32) *Node {
 	// to put a breakpoint. Not sure if that's really necessary or not
 	// (in which case it could go at the end of the function instead).
 	inlMark := nod(OINLMARK, nil, nil)
-	inlMark.Pos = n.Pos
+	inlMark.Pos = n.Pos.WithIsStmt()
 	inlMark.Xoffset = int64(newIndex)
 	ninit.Append(inlMark)
 

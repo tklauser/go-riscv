@@ -864,7 +864,7 @@ TEXT _cgo_topofstack(SB),NOSPLIT,$8
 
 // The top-most function running on a goroutine
 // returns to goexit+PCQuantum.
-TEXT runtime·goexit(SB),NOSPLIT|NOFRAME,$0-0
+TEXT runtime·goexit(SB),NOSPLIT|NOFRAME|TOPFRAME,$0-0
 	MOVW	R0, R0	// NOP
 	BL	runtime·goexit1(SB)	// does not return
 	// traceback from goexit1 must hit code range of goexit
@@ -889,9 +889,6 @@ TEXT runtime·usplitR0(SB),NOSPLIT,$0
 	MOVW	$1000000, R1
 	MULU	R0, R1
 	SUB	R1, R3, R1
-	RET
-
-TEXT runtime·sigreturn(SB),NOSPLIT,$0-0
 	RET
 
 #ifndef GOOS_nacl

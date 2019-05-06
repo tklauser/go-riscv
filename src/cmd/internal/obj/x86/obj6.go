@@ -975,7 +975,13 @@ func isZeroArgRuntimeCall(s *obj.LSym) bool {
 		return false
 	}
 	switch s.Name {
-	case "runtime.panicindex", "runtime.panicslice", "runtime.panicdivide", "runtime.panicwrap", "runtime.panicshift":
+	case "runtime.panicdivide", "runtime.panicwrap", "runtime.panicshift":
+		return true
+	}
+	if strings.HasPrefix(s.Name, "runtime.panicIndex") || strings.HasPrefix(s.Name, "runtime.panicSlice") {
+		// These functions do take arguments (in registers),
+		// but use no stack before they do a stack check. We
+		// should include them. See issue 31219.
 		return true
 	}
 	return false
@@ -1200,7 +1206,6 @@ func stacksplit(ctxt *obj.Link, cursym *obj.LSym, p *obj.Prog, newprog obj.ProgA
 var unaryDst = map[obj.As]bool{
 	ABSWAPL:     true,
 	ABSWAPQ:     true,
-	ABSWAPW:     true,
 	ACLFLUSH:    true,
 	ACLFLUSHOPT: true,
 	ACMPXCHG16B: true,

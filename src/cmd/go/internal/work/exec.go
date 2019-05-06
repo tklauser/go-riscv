@@ -8,6 +8,11 @@ package work
 
 import (
 	"bytes"
+	"cmd/go/internal/base"
+	"cmd/go/internal/cache"
+	"cmd/go/internal/cfg"
+	"cmd/go/internal/load"
+	"cmd/go/internal/str"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,12 +30,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"cmd/go/internal/base"
-	"cmd/go/internal/cache"
-	"cmd/go/internal/cfg"
-	"cmd/go/internal/load"
-	"cmd/go/internal/str"
 )
 
 // actionList returns the list of actions in the dag rooted at root
@@ -224,12 +223,16 @@ func (b *Builder) buildActionID(a *Action) cache.ActionID {
 		if len(p.SFiles) > 0 {
 			fmt.Fprintf(h, "asm %q %q %q\n", b.toolID("asm"), forcedAsmflags, p.Internal.Asmflags)
 		}
+
 		// GO386, GOARM, GOMIPS, etc.
-		baseArch := strings.TrimSuffix(cfg.BuildContext.GOARCH, "le")
-		fmt.Fprintf(h, "GO$GOARCH=%s\n", os.Getenv("GO"+strings.ToUpper(baseArch)))
+		key, val := cfg.GetArchEnv()
+		fmt.Fprintf(h, "%s=%s\n", key, val)
 
 		// TODO(rsc): Convince compiler team not to add more magic environment variables,
 		// or perhaps restrict the environment variables passed to subprocesses.
+		// Because these are clumsy, undocumented special-case hacks
+		// for debugging the compiler, they are not settable using 'go env -w',
+		// and so here we use os.Getenv, not cfg.Getenv.
 		magic := []string{
 			"GOCLOBBERDEADHASH",
 			"GOSSAFUNC",
@@ -266,6 +269,7 @@ func (b *Builder) buildActionID(a *Action) cache.ActionID {
 		}
 		fmt.Fprintf(h, "compile %s %q %q\n", id, forcedGccgoflags, p.Internal.Gccgoflags)
 		fmt.Fprintf(h, "pkgpath %s\n", gccgoPkgpath(p))
+		fmt.Fprintf(h, "ar %q\n", BuildToolchain.(gccgoToolchain).ar())
 		if len(p.SFiles) > 0 {
 			id, _ = b.gccgoToolID(BuildToolchain.compiler(), "assembler-with-cpp")
 			// Ignore error; different assembler versions
@@ -709,7 +713,7 @@ func (b *Builder) build(a *Action) (err error) {
 	// This is read by readGccgoArchive in cmd/internal/buildid/buildid.go.
 	if a.buildID != "" && cfg.BuildToolchainName == "gccgo" {
 		switch cfg.Goos {
-		case "aix", "android", "dragonfly", "freebsd", "linux", "netbsd", "openbsd", "solaris":
+		case "aix", "android", "dragonfly", "freebsd", "illumos", "linux", "netbsd", "openbsd", "solaris":
 			asmfile, err := b.gccgoBuildIDFile(a)
 			if err != nil {
 				return err
@@ -1115,21 +1119,16 @@ func (b *Builder) printLinkerConfig(h io.Writer, p *load.Package) {
 		if p != nil {
 			fmt.Fprintf(h, "linkflags %q\n", p.Internal.Ldflags)
 		}
-		fmt.Fprintf(h, "GO$GOARCH=%s\n", os.Getenv("GO"+strings.ToUpper(cfg.BuildContext.GOARCH))) // GO386, GOARM, etc
+
+		// GO386, GOARM, GOMIPS, etc.
+		key, val := cfg.GetArchEnv()
+		fmt.Fprintf(h, "%s=%s\n", key, val)
 
 		// The linker writes source file paths that say GOROOT_FINAL.
 		fmt.Fprintf(h, "GOROOT=%s\n", cfg.GOROOT_FINAL)
 
-		// TODO(rsc): Convince linker team not to add more magic environment variables,
-		// or perhaps restrict the environment variables passed to subprocesses.
-		magic := []string{
-			"GO_EXTLINK_ENABLED",
-		}
-		for _, env := range magic {
-			if x := os.Getenv(env); x != "" {
-				fmt.Fprintf(h, "magic %s=%s\n", env, x)
-			}
-		}
+		// GO_EXTLINK_ENABLED controls whether the external linker is used.
+		fmt.Fprintf(h, "GO_EXTLINK_ENABLED=%s\n", cfg.Getenv("GO_EXTLINK_ENABLED"))
 
 		// TODO(rsc): Do cgo settings and flags need to be included?
 		// Or external linker settings and flags?
@@ -1931,7 +1930,8 @@ func joinUnambiguously(a []string) string {
 		q := strconv.Quote(s)
 		// A gccgo command line can contain -( and -).
 		// Make sure we quote them since they are special to the shell.
-		if s == "" || strings.ContainsAny(s, " ()") || len(q) > len(s)+2 {
+		// The trimpath argument can also contain > (part of =>) and ;. Quote those too.
+		if s == "" || strings.ContainsAny(s, " ()>;") || len(q) > len(s)+2 {
 			buf.WriteString(q)
 		} else {
 			buf.WriteString(s)
@@ -2192,8 +2192,8 @@ func (b *Builder) gccld(p *load.Package, objdir, outfile string, flags []string,
 
 // Grab these before main helpfully overwrites them.
 var (
-	origCC  = os.Getenv("CC")
-	origCXX = os.Getenv("CXX")
+	origCC  = cfg.Getenv("CC")
+	origCXX = cfg.Getenv("CXX")
 )
 
 // gccCmd returns a gcc command line prefix
@@ -2225,7 +2225,7 @@ func (b *Builder) cxxExe() []string {
 
 // fcExe returns the FC compiler setting without all the extra flags we add implicitly.
 func (b *Builder) fcExe() []string {
-	return b.compilerExe(os.Getenv("FC"), "gfortran")
+	return b.compilerExe(cfg.Getenv("FC"), "gfortran")
 }
 
 // compilerExe returns the compiler to use given an
@@ -2391,7 +2391,7 @@ func (b *Builder) gccArchArgs() []string {
 // envList returns the value of the given environment variable broken
 // into fields, using the default value when the variable is empty.
 func envList(key, def string) []string {
-	v := os.Getenv(key)
+	v := cfg.Getenv(key)
 	if v == "" {
 		v = def
 	}
@@ -2448,7 +2448,7 @@ func (b *Builder) cgo(a *Action, cgoExe, objdir string, pcCFLAGS, pcLDFLAGS, cgo
 	// Support gfortran out of the box and let others pass the correct link options
 	// via CGO_LDFLAGS
 	if len(ffiles) > 0 {
-		fc := os.Getenv("FC")
+		fc := cfg.Getenv("FC")
 		if fc == "" {
 			fc = "gfortran"
 		}

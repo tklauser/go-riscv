@@ -49,7 +49,7 @@ var (
 
 	// dirs are the directories to look for *.go files in.
 	// TODO(bradfitz): just use all directories?
-	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs", "codegen"}
+	dirs = []string{".", "ken", "chan", "interface", "syntax", "dwarf", "fixedbugs", "codegen", "runtime"}
 
 	// ratec controls the max number of tests running at a time.
 	ratec chan bool
@@ -660,6 +660,9 @@ func (t *test) run() {
 			cmdline = append(cmdline, long)
 			cmd := exec.Command(goTool(), cmdline...)
 			cmd.Env = append(os.Environ(), env.Environ()...)
+			if len(flags) > 0 && flags[0] == "-race" {
+				cmd.Env = append(cmd.Env, "CGO_ENABLED=1")
+			}
 
 			var buf bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &buf, &buf

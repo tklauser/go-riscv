@@ -319,6 +319,8 @@ func rewriteValueARM64(v *Value) bool {
 		return rewriteValueARM64_OpARM64RORWconst_0(v)
 	case OpARM64RORconst:
 		return rewriteValueARM64_OpARM64RORconst_0(v)
+	case OpARM64SBCSflags:
+		return rewriteValueARM64_OpARM64SBCSflags_0(v)
 	case OpARM64SLL:
 		return rewriteValueARM64_OpARM64SLL_0(v)
 	case OpARM64SLLconst:
@@ -429,6 +431,8 @@ func rewriteValueARM64(v *Value) bool {
 		return rewriteValueARM64_OpAtomicLoad32_0(v)
 	case OpAtomicLoad64:
 		return rewriteValueARM64_OpAtomicLoad64_0(v)
+	case OpAtomicLoad8:
+		return rewriteValueARM64_OpAtomicLoad8_0(v)
 	case OpAtomicLoadPtr:
 		return rewriteValueARM64_OpAtomicLoadPtr_0(v)
 	case OpAtomicOr8:
@@ -799,10 +803,14 @@ func rewriteValueARM64(v *Value) bool {
 		return rewriteValueARM64_OpPopCount32_0(v)
 	case OpPopCount64:
 		return rewriteValueARM64_OpPopCount64_0(v)
+	case OpRotateLeft16:
+		return rewriteValueARM64_OpRotateLeft16_0(v)
 	case OpRotateLeft32:
 		return rewriteValueARM64_OpRotateLeft32_0(v)
 	case OpRotateLeft64:
 		return rewriteValueARM64_OpRotateLeft64_0(v)
+	case OpRotateLeft8:
+		return rewriteValueARM64_OpRotateLeft8_0(v)
 	case OpRound:
 		return rewriteValueARM64_OpRound_0(v)
 	case OpRound32F:
@@ -28509,6 +28517,80 @@ func rewriteValueARM64_OpARM64RORconst_0(v *Value) bool {
 	}
 	return false
 }
+func rewriteValueARM64_OpARM64SBCSflags_0(v *Value) bool {
+	b := v.Block
+	typ := &b.Func.Config.Types
+	// match: (SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags (NEG <typ.UInt64> (NGCzerocarry <typ.UInt64> bo)))))
+	// cond:
+	// result: (SBCSflags x y bo)
+	for {
+		_ = v.Args[2]
+		x := v.Args[0]
+		y := v.Args[1]
+		v_2 := v.Args[2]
+		if v_2.Op != OpSelect1 {
+			break
+		}
+		if v_2.Type != types.TypeFlags {
+			break
+		}
+		v_2_0 := v_2.Args[0]
+		if v_2_0.Op != OpARM64NEGSflags {
+			break
+		}
+		v_2_0_0 := v_2_0.Args[0]
+		if v_2_0_0.Op != OpARM64NEG {
+			break
+		}
+		if v_2_0_0.Type != typ.UInt64 {
+			break
+		}
+		v_2_0_0_0 := v_2_0_0.Args[0]
+		if v_2_0_0_0.Op != OpARM64NGCzerocarry {
+			break
+		}
+		if v_2_0_0_0.Type != typ.UInt64 {
+			break
+		}
+		bo := v_2_0_0_0.Args[0]
+		v.reset(OpARM64SBCSflags)
+		v.AddArg(x)
+		v.AddArg(y)
+		v.AddArg(bo)
+		return true
+	}
+	// match: (SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags (MOVDconst [0]))))
+	// cond:
+	// result: (SUBSflags x y)
+	for {
+		_ = v.Args[2]
+		x := v.Args[0]
+		y := v.Args[1]
+		v_2 := v.Args[2]
+		if v_2.Op != OpSelect1 {
+			break
+		}
+		if v_2.Type != types.TypeFlags {
+			break
+		}
+		v_2_0 := v_2.Args[0]
+		if v_2_0.Op != OpARM64NEGSflags {
+			break
+		}
+		v_2_0_0 := v_2_0.Args[0]
+		if v_2_0_0.Op != OpARM64MOVDconst {
+			break
+		}
+		if v_2_0_0.AuxInt != 0 {
+			break
+		}
+		v.reset(OpARM64SUBSflags)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
 func rewriteValueARM64_OpARM64SLL_0(v *Value) bool {
 	// match: (SLL x (MOVDconst [c]))
 	// cond:
@@ -32235,6 +32317,19 @@ func rewriteValueARM64_OpAtomicLoad64_0(v *Value) bool {
 		return true
 	}
 }
+func rewriteValueARM64_OpAtomicLoad8_0(v *Value) bool {
+	// match: (AtomicLoad8 ptr mem)
+	// cond:
+	// result: (LDARB ptr mem)
+	for {
+		mem := v.Args[1]
+		ptr := v.Args[0]
+		v.reset(OpARM64LDARB)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+}
 func rewriteValueARM64_OpAtomicLoadPtr_0(v *Value) bool {
 	// match: (AtomicLoadPtr ptr mem)
 	// cond:
@@ -35836,6 +35931,38 @@ func rewriteValueARM64_OpPopCount64_0(v *Value) bool {
 		return true
 	}
 }
+func rewriteValueARM64_OpRotateLeft16_0(v *Value) bool {
+	b := v.Block
+	typ := &b.Func.Config.Types
+	// match: (RotateLeft16 <t> x (MOVDconst [c]))
+	// cond:
+	// result: (Or16 (Lsh16x64 <t> x (MOVDconst [c&15])) (Rsh16Ux64 <t> x (MOVDconst [-c&15])))
+	for {
+		t := v.Type
+		_ = v.Args[1]
+		x := v.Args[0]
+		v_1 := v.Args[1]
+		if v_1.Op != OpARM64MOVDconst {
+			break
+		}
+		c := v_1.AuxInt
+		v.reset(OpOr16)
+		v0 := b.NewValue0(v.Pos, OpLsh16x64, t)
+		v0.AddArg(x)
+		v1 := b.NewValue0(v.Pos, OpARM64MOVDconst, typ.UInt64)
+		v1.AuxInt = c & 15
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v2 := b.NewValue0(v.Pos, OpRsh16Ux64, t)
+		v2.AddArg(x)
+		v3 := b.NewValue0(v.Pos, OpARM64MOVDconst, typ.UInt64)
+		v3.AuxInt = -c & 15
+		v2.AddArg(v3)
+		v.AddArg(v2)
+		return true
+	}
+	return false
+}
 func rewriteValueARM64_OpRotateLeft32_0(v *Value) bool {
 	b := v.Block
 	// match: (RotateLeft32 x y)
@@ -35867,6 +35994,38 @@ func rewriteValueARM64_OpRotateLeft64_0(v *Value) bool {
 		v.AddArg(v0)
 		return true
 	}
+}
+func rewriteValueARM64_OpRotateLeft8_0(v *Value) bool {
+	b := v.Block
+	typ := &b.Func.Config.Types
+	// match: (RotateLeft8 <t> x (MOVDconst [c]))
+	// cond:
+	// result: (Or8 (Lsh8x64 <t> x (MOVDconst [c&7])) (Rsh8Ux64 <t> x (MOVDconst [-c&7])))
+	for {
+		t := v.Type
+		_ = v.Args[1]
+		x := v.Args[0]
+		v_1 := v.Args[1]
+		if v_1.Op != OpARM64MOVDconst {
+			break
+		}
+		c := v_1.AuxInt
+		v.reset(OpOr8)
+		v0 := b.NewValue0(v.Pos, OpLsh8x64, t)
+		v0.AddArg(x)
+		v1 := b.NewValue0(v.Pos, OpARM64MOVDconst, typ.UInt64)
+		v1.AuxInt = c & 7
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v2 := b.NewValue0(v.Pos, OpRsh8Ux64, t)
+		v2.AddArg(x)
+		v3 := b.NewValue0(v.Pos, OpARM64MOVDconst, typ.UInt64)
+		v3.AuxInt = -c & 7
+		v2.AddArg(v3)
+		v.AddArg(v2)
+		return true
+	}
+	return false
 }
 func rewriteValueARM64_OpRound_0(v *Value) bool {
 	// match: (Round x)
@@ -36898,6 +37057,30 @@ func rewriteValueARM64_OpSelect0_0(v *Value) bool {
 		v.AddArg(v0)
 		return true
 	}
+	// match: (Select0 (Sub64borrow x y bo))
+	// cond:
+	// result: (Select0 <typ.UInt64> (SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags bo))))
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSub64borrow {
+			break
+		}
+		bo := v_0.Args[2]
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpSelect0)
+		v.Type = typ.UInt64
+		v0 := b.NewValue0(v.Pos, OpARM64SBCSflags, types.NewTuple(typ.UInt64, types.TypeFlags))
+		v0.AddArg(x)
+		v0.AddArg(y)
+		v1 := b.NewValue0(v.Pos, OpSelect1, types.TypeFlags)
+		v2 := b.NewValue0(v.Pos, OpARM64NEGSflags, types.NewTuple(typ.UInt64, types.TypeFlags))
+		v2.AddArg(bo)
+		v1.AddArg(v2)
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		return true
+	}
 	return false
 }
 func rewriteValueARM64_OpSelect1_0(v *Value) bool {
@@ -36924,6 +37107,34 @@ func rewriteValueARM64_OpSelect1_0(v *Value) bool {
 		v3 := b.NewValue0(v.Pos, OpARM64ADDSconstflags, types.NewTuple(typ.UInt64, types.TypeFlags))
 		v3.AuxInt = -1
 		v3.AddArg(c)
+		v2.AddArg(v3)
+		v1.AddArg(v2)
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		return true
+	}
+	// match: (Select1 (Sub64borrow x y bo))
+	// cond:
+	// result: (NEG <typ.UInt64> (NGCzerocarry <typ.UInt64> (Select1 <types.TypeFlags> (SBCSflags x y (Select1 <types.TypeFlags> (NEGSflags bo))))))
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSub64borrow {
+			break
+		}
+		bo := v_0.Args[2]
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpARM64NEG)
+		v.Type = typ.UInt64
+		v0 := b.NewValue0(v.Pos, OpARM64NGCzerocarry, typ.UInt64)
+		v1 := b.NewValue0(v.Pos, OpSelect1, types.TypeFlags)
+		v2 := b.NewValue0(v.Pos, OpARM64SBCSflags, types.NewTuple(typ.UInt64, types.TypeFlags))
+		v2.AddArg(x)
+		v2.AddArg(y)
+		v3 := b.NewValue0(v.Pos, OpSelect1, types.TypeFlags)
+		v4 := b.NewValue0(v.Pos, OpARM64NEGSflags, types.NewTuple(typ.UInt64, types.TypeFlags))
+		v4.AddArg(bo)
+		v3.AddArg(v4)
 		v2.AddArg(v3)
 		v1.AddArg(v2)
 		v0.AddArg(v1)

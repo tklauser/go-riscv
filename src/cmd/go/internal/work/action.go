@@ -16,8 +16,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"cmd/go/internal/base"
 	"cmd/go/internal/cache"
@@ -224,7 +226,7 @@ func (b *Builder) Init() {
 	if cfg.BuildN {
 		b.WorkDir = "$WORK"
 	} else {
-		tmp, err := ioutil.TempDir(os.Getenv("GOTMPDIR"), "go-build")
+		tmp, err := ioutil.TempDir(cfg.Getenv("GOTMPDIR"), "go-build")
 		if err != nil {
 			base.Fatalf("go: creating work dir: %v", err)
 		}
@@ -242,7 +244,26 @@ func (b *Builder) Init() {
 		}
 		if !cfg.BuildWork {
 			workdir := b.WorkDir
-			base.AtExit(func() { os.RemoveAll(workdir) })
+			base.AtExit(func() {
+				start := time.Now()
+				for {
+					err := os.RemoveAll(workdir)
+					if err == nil {
+						return
+					}
+
+					// On some configurations of Windows, directories containing executable
+					// files may be locked for a while after the executable exits (perhaps
+					// due to antivirus scans?). It's probably worth a little extra latency
+					// on exit to avoid filling up the user's temporary directory with leaked
+					// files. (See golang.org/issue/30789.)
+					if runtime.GOOS != "windows" || time.Since(start) >= 500*time.Millisecond {
+						fmt.Fprintf(os.Stderr, "go: failed to remove work dir: %s\n", err)
+						return
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+			})
 		}
 	}
 
@@ -419,7 +440,7 @@ func (b *Builder) vetAction(mode, depMode BuildMode, p *load.Package) *Action {
 		} else {
 			deps = []*Action{a1, aFmt}
 		}
-		for _, p1 := range load.PackageList(p.Internal.Imports) {
+		for _, p1 := range p.Internal.Imports {
 			deps = append(deps, b.vetAction(mode, depMode, p1))
 		}
 

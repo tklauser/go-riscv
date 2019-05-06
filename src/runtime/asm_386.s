@@ -172,8 +172,10 @@ nocpuinfo:
 	TESTL	AX, AX
 	JZ	needtls
 #ifdef GOOS_android
-	MOVL	0(TLS), BX
-	MOVL	BX, 12(SP)	// arg 4: TLS base, stored in the first slot (TLS_SLOT_SELF).
+	// arg 4: TLS base, stored in slot 0 (Android's TLS_SLOT_SELF).
+	// Compensate for tls_g (+8).
+	MOVL	-8(TLS), BX
+	MOVL	BX, 12(SP)
 	MOVL	$runtime·tls_g(SB), 8(SP)	// arg 3: &tls_g
 #else
 	MOVL	$0, BX
@@ -1564,5 +1566,8 @@ TEXT runtime·panicExtendSlice3CU(SB),NOSPLIT,$0-12
 	JMP	runtime·goPanicExtendSlice3CU(SB)
 
 #ifdef GOOS_android
+// Use the free TLS_SLOT_APP slot #2 on Android Q.
+// Earlier androids are set up in gcc_android.c.
+DATA runtime·tls_g+0(SB)/4, $8
 GLOBL runtime·tls_g+0(SB), NOPTR, $4
 #endif

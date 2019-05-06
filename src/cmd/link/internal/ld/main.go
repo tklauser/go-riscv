@@ -237,12 +237,39 @@ func Main(arch *sys.Arch, theArch Arch) {
 	ctxt.findfunctab()
 	ctxt.typelink()
 	ctxt.symtab()
+	ctxt.buildinfo()
 	ctxt.dodata()
 	order := ctxt.address()
-	ctxt.reloc()
 	dwarfcompress(ctxt)
-	ctxt.layout(order)
-	thearch.Asmb(ctxt)
+	filesize := ctxt.layout(order)
+
+	// Write out the output file.
+	// It is split into two parts (Asmb and Asmb2). The first
+	// part writes most of the content (sections and segments),
+	// for which we have computed the size and offset, in a
+	// mmap'd region. The second part writes more content, for
+	// which we don't know the size.
+	var outputMmapped bool
+	if ctxt.Arch.Family != sys.Wasm {
+		// Don't mmap if we're building for Wasm. Wasm file
+		// layout is very different so filesize is meaningless.
+		err := ctxt.Out.Mmap(filesize)
+		outputMmapped = err == nil
+	}
+	if outputMmapped {
+		// Asmb will redirect symbols to the output file mmap, and relocations
+		// will be applied directly there.
+		thearch.Asmb(ctxt)
+		ctxt.reloc()
+		ctxt.Out.Munmap()
+	} else {
+		// If we don't mmap, we need to apply relocations before
+		// writing out.
+		ctxt.reloc()
+		thearch.Asmb(ctxt)
+	}
+	thearch.Asmb2(ctxt)
+
 	ctxt.undef()
 	ctxt.hostlink()
 	ctxt.archive()

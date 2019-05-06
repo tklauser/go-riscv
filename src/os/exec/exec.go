@@ -47,6 +47,8 @@ func (e *Error) Error() string {
 	return "exec: " + strconv.Quote(e.Name) + ": " + e.Err.Error()
 }
 
+func (e *Error) Unwrap() error { return e.Err }
+
 // Cmd represents an external command being prepared or run.
 //
 // A Cmd cannot be reused after calling its Run, Output or CombinedOutput
@@ -71,6 +73,8 @@ type Cmd struct {
 	// environment.
 	// If Env contains duplicate environment keys, only the last
 	// value in the slice for each duplicate key is used.
+	// As a special case on Windows, SYSTEMROOT is always added if
+	// missing and not explicitly set to the empty string.
 	Env []string
 
 	// Dir specifies the working directory of the command.
@@ -412,7 +416,7 @@ func (c *Cmd) Start() error {
 	c.Process, err = os.StartProcess(c.Path, c.argv(), &os.ProcAttr{
 		Dir:   c.Dir,
 		Files: c.childFiles,
-		Env:   dedupEnv(c.envv()),
+		Env:   addCriticalEnv(dedupEnv(c.envv())),
 		Sys:   c.SysProcAttr,
 	})
 	if err != nil {
@@ -755,4 +759,25 @@ func dedupEnvCase(caseInsensitive bool, env []string) []string {
 		out = append(out, kv)
 	}
 	return out
+}
+
+// addCriticalEnv adds any critical environment variables that are required
+// (or at least almost always required) on the operating system.
+// Currently this is only used for Windows.
+func addCriticalEnv(env []string) []string {
+	if runtime.GOOS != "windows" {
+		return env
+	}
+	for _, kv := range env {
+		eq := strings.Index(kv, "=")
+		if eq < 0 {
+			continue
+		}
+		k := kv[:eq]
+		if strings.EqualFold(k, "SYSTEMROOT") {
+			// We already have it.
+			return env
+		}
+	}
+	return append(env, "SYSTEMROOT="+os.Getenv("SYSTEMROOT"))
 }

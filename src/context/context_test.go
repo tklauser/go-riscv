@@ -5,8 +5,10 @@
 package context
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -94,7 +96,7 @@ func XTestWithCancel(t testingT) {
 	}
 
 	cancel()
-	time.Sleep(100 * time.Millisecond) // let cancelation propagate
+	time.Sleep(100 * time.Millisecond) // let cancellation propagate
 
 	for i, c := range contexts {
 		select {
@@ -306,7 +308,7 @@ func XTestCanceledTimeout(t testingT) {
 	o := otherContext{c}
 	c, cancel := WithTimeout(o, 2*time.Second)
 	cancel()
-	time.Sleep(100 * time.Millisecond) // let cancelation propagate
+	time.Sleep(100 * time.Millisecond) // let cancellation propagate
 	select {
 	case <-c.Done():
 	default:
@@ -646,5 +648,8 @@ func XTestDeadlineExceededSupportsTimeout(t testingT) {
 	}
 	if !i.Timeout() {
 		t.Fatal("wrong value for timeout")
+	}
+	if !errors.Is(DeadlineExceeded, os.ErrTimeout) {
+		t.Fatal("errors.Is(DeadlineExceeded, os.ErrTimeout) = false, want true")
 	}
 }

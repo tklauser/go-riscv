@@ -24,26 +24,28 @@
 
 package suffixarray
 
-import "sort"
+import (
+	"sort"
+)
 
-func qsufsort(data []byte) []int {
+func qsufsort32(data []byte) []int32 {
 	// initial sorting by first byte of suffix
-	sa := sortedByFirstByte(data)
+	sa := sortedByFirstByte32(data)
 	if len(sa) < 2 {
 		return sa
 	}
 	// initialize the group lookup table
 	// this becomes the inverse of the suffix array when all groups are sorted
-	inv := initGroups(sa, data)
+	inv := initGroups32(sa, data)
 
 	// the index starts 1-ordered
-	sufSortable := &suffixSortable{sa: sa, inv: inv, h: 1}
+	sufSortable := &suffixSortable32{sa: sa, inv: inv, h: 1}
 
-	for sa[0] > -len(sa) { // until all suffixes are one big sorted group
+	for sa[0] > -int32(len(sa)) { // until all suffixes are one big sorted group
 		// The suffixes are h-ordered, make them 2*h-ordered
-		pi := 0 // pi is first position of first group
-		sl := 0 // sl is negated length of sorted groups
-		for pi < len(sa) {
+		pi := int32(0) // pi is first position of first group
+		sl := int32(0) // sl is negated length of sorted groups
+		for pi < int32(len(sa)) {
 			if s := sa[pi]; s < 0 { // if pi starts sorted group
 				pi -= s // skip over sorted group
 				sl += s // add negated length to sl
@@ -67,12 +69,12 @@ func qsufsort(data []byte) []int {
 	}
 
 	for i := range sa { // reconstruct suffix array from inverse
-		sa[inv[i]] = i
+		sa[inv[i]] = int32(i)
 	}
 	return sa
 }
 
-func sortedByFirstByte(data []byte) []int {
+func sortedByFirstByte32(data []byte) []int32 {
 	// total byte counts
 	var count [256]int
 	for _, b := range data {
@@ -84,20 +86,20 @@ func sortedByFirstByte(data []byte) []int {
 		count[b], sum = sum, count[b]+sum
 	}
 	// iterate through bytes, placing index into the correct spot in sa
-	sa := make([]int, len(data))
+	sa := make([]int32, len(data))
 	for i, b := range data {
-		sa[count[b]] = i
+		sa[count[b]] = int32(i)
 		count[b]++
 	}
 	return sa
 }
 
-func initGroups(sa []int, data []byte) []int {
+func initGroups32(sa []int32, data []byte) []int32 {
 	// label contiguous same-letter groups with the same group number
-	inv := make([]int, len(data))
-	prevGroup := len(sa) - 1
+	inv := make([]int32, len(data))
+	prevGroup := int32(len(sa)) - 1
 	groupByte := data[sa[prevGroup]]
-	for i := len(sa) - 1; i >= 0; i-- {
+	for i := int32(len(sa)) - 1; i >= 0; i-- {
 		if b := data[sa[i]]; b < groupByte {
 			if prevGroup == i+1 {
 				sa[i+1] = -1
@@ -114,13 +116,13 @@ func initGroups(sa []int, data []byte) []int {
 	// This is necessary to ensure the suffix "a" is before "aba"
 	// when using a potentially unstable sort.
 	lastByte := data[len(data)-1]
-	s := -1
+	s := int32(-1)
 	for i := range sa {
 		if sa[i] >= 0 {
 			if data[sa[i]] == lastByte && s == -1 {
-				s = i
+				s = int32(i)
 			}
-			if sa[i] == len(sa)-1 {
+			if sa[i] == int32(len(sa))-1 {
 				sa[i], sa[s] = sa[s], sa[i]
 				inv[sa[s]] = s
 				sa[s] = -1 // mark it as an isolated sorted group
@@ -131,31 +133,31 @@ func initGroups(sa []int, data []byte) []int {
 	return inv
 }
 
-type suffixSortable struct {
-	sa  []int
-	inv []int
-	h   int
-	buf []int // common scratch space
+type suffixSortable32 struct {
+	sa  []int32
+	inv []int32
+	h   int32
+	buf []int32 // common scratch space
 }
 
-func (x *suffixSortable) Len() int           { return len(x.sa) }
-func (x *suffixSortable) Less(i, j int) bool { return x.inv[x.sa[i]+x.h] < x.inv[x.sa[j]+x.h] }
-func (x *suffixSortable) Swap(i, j int)      { x.sa[i], x.sa[j] = x.sa[j], x.sa[i] }
+func (x *suffixSortable32) Len() int           { return len(x.sa) }
+func (x *suffixSortable32) Less(i, j int) bool { return x.inv[x.sa[i]+x.h] < x.inv[x.sa[j]+x.h] }
+func (x *suffixSortable32) Swap(i, j int)      { x.sa[i], x.sa[j] = x.sa[j], x.sa[i] }
 
-func (x *suffixSortable) updateGroups(offset int) {
+func (x *suffixSortable32) updateGroups(offset int32) {
 	bounds := x.buf[0:0]
 	group := x.inv[x.sa[0]+x.h]
 	for i := 1; i < len(x.sa); i++ {
 		if g := x.inv[x.sa[i]+x.h]; g > group {
-			bounds = append(bounds, i)
+			bounds = append(bounds, int32(i))
 			group = g
 		}
 	}
-	bounds = append(bounds, len(x.sa))
+	bounds = append(bounds, int32(len(x.sa)))
 	x.buf = bounds
 
 	// update the group numberings after all new groups are determined
-	prev := 0
+	prev := int32(0)
 	for _, b := range bounds {
 		for i := prev; i < b; i++ {
 			x.inv[x.sa[i]] = offset + b - 1

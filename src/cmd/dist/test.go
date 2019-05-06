@@ -569,7 +569,7 @@ func (t *tester) registerTests() {
 	}
 
 	// Test internal linking of PIE binaries where it is supported.
-	if goos == "linux" && goarch == "amd64" {
+	if goos == "linux" && (goarch == "amd64" || goarch == "arm64") {
 		t.tests = append(t.tests, distTest{
 			name:    "pie_internal",
 			heading: "internal linking of -buildmode=pie",
@@ -910,7 +910,7 @@ func (t *tester) internalLink() bool {
 	// Internally linking cgo is incomplete on some architectures.
 	// https://golang.org/issue/10373
 	// https://golang.org/issue/14449
-	if goarch == "arm64" || goarch == "mips64" || goarch == "mips64le" || goarch == "mips" || goarch == "mipsle" {
+	if goarch == "mips64" || goarch == "mips64le" || goarch == "mips" || goarch == "mipsle" {
 		return false
 	}
 	if goos == "aix" {
@@ -928,7 +928,8 @@ func (t *tester) supportedBuildmode(mode string) bool {
 			return false
 		}
 		switch pair {
-		case "darwin-386", "darwin-amd64", "darwin-arm", "darwin-arm64",
+		case "aix-ppc64",
+			"darwin-386", "darwin-amd64", "darwin-arm", "darwin-arm64",
 			"linux-amd64", "linux-386", "linux-ppc64le", "linux-s390x",
 			"freebsd-amd64",
 			"windows-amd64", "windows-386":
@@ -1029,7 +1030,7 @@ func (t *tester) cgoTest(dt *distTest) error {
 		"dragonfly-amd64",
 		"freebsd-386", "freebsd-amd64", "freebsd-arm",
 		"linux-386", "linux-amd64", "linux-arm", "linux-ppc64le", "linux-s390x",
-		"netbsd-386", "netbsd-amd64":
+		"netbsd-386", "netbsd-amd64", "linux-arm64":
 
 		cmd := t.addCmd(dt, "misc/cgo/test", t.goTest())
 		cmd.Env = append(os.Environ(), "GOFLAGS=-ldflags=-linkmode=external")
@@ -1102,6 +1103,13 @@ func (t *tester) runPending(nextTest *distTest) {
 			} else {
 				timelog("start", w.dt.name)
 				w.out, w.err = w.cmd.CombinedOutput()
+				if w.err != nil {
+					if isUnsupportedVMASize(w) {
+						timelog("skip", w.dt.name)
+						w.out = []byte(fmt.Sprintf("skipped due to unsupported VMA\n"))
+						w.err = nil
+					}
+				}
 			}
 			timelog("end", w.dt.name)
 			w.end <- true
@@ -1113,7 +1121,6 @@ func (t *tester) runPending(nextTest *distTest) {
 	var last *distTest
 	for ended < len(worklist) {
 		for started < len(worklist) && started-ended < maxbg {
-			//println("start", started)
 			w := worklist[started]
 			started++
 			w.start <- !t.failed || t.keepGoing
@@ -1134,7 +1141,6 @@ func (t *tester) runPending(nextTest *distTest) {
 		if vflag > 1 {
 			errprintf("%s\n", strings.Join(w.cmd.Args, " "))
 		}
-		//println("wait", ended)
 		ended++
 		<-w.end
 		os.Stdout.Write(w.out)
@@ -1382,6 +1388,11 @@ func (t *tester) packageHasBenchmarks(pkg string) bool {
 // raceDetectorSupported is a copy of the function
 // cmd/internal/sys.RaceDetectorSupported, which can't be used here
 // because cmd/dist has to be buildable by Go 1.4.
+// The race detector only supports 48-bit VMA on arm64. But we don't have
+// a good solution to check VMA size(See https://golang.org/issue/29948)
+// raceDetectorSupported will always return true for arm64. But race
+// detector tests may abort on non 48-bit VMA configuration, the tests
+// will be marked as "skipped" in this case.
 func raceDetectorSupported(goos, goarch string) bool {
 	switch goos {
 	case "linux":
@@ -1402,4 +1413,12 @@ func mSanSupported(goos, goarch string) bool {
 	default:
 		return false
 	}
+}
+
+// isUnsupportedVMASize reports whether the failure is caused by an unsupported
+// VMA for the race detector (for example, running the race detector on an
+// arm64 machine configured with 39-bit VMA)
+func isUnsupportedVMASize(w *work) bool {
+	unsupportedVMA := []byte("unsupported VMA range")
+	return w.dt.name == "race" && bytes.Contains(w.out, unsupportedVMA)
 }

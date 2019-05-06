@@ -381,8 +381,14 @@ func rewriteValueWasm(v *Value) bool {
 		return rewriteValueWasm_OpPopCount64_0(v)
 	case OpPopCount8:
 		return rewriteValueWasm_OpPopCount8_0(v)
+	case OpRotateLeft16:
+		return rewriteValueWasm_OpRotateLeft16_0(v)
+	case OpRotateLeft32:
+		return rewriteValueWasm_OpRotateLeft32_0(v)
 	case OpRotateLeft64:
 		return rewriteValueWasm_OpRotateLeft64_0(v)
+	case OpRotateLeft8:
+		return rewriteValueWasm_OpRotateLeft8_0(v)
 	case OpRound32F:
 		return rewriteValueWasm_OpRound32F_0(v)
 	case OpRound64F:
@@ -1095,10 +1101,10 @@ func rewriteValueWasm_OpCtz8NonZero_0(v *Value) bool {
 func rewriteValueWasm_OpCvt32Fto32_0(v *Value) bool {
 	// match: (Cvt32Fto32 x)
 	// cond:
-	// result: (I64TruncF64S x)
+	// result: (I64TruncSatF64S x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64S)
+		v.reset(OpWasmI64TruncSatF64S)
 		v.AddArg(x)
 		return true
 	}
@@ -1106,10 +1112,10 @@ func rewriteValueWasm_OpCvt32Fto32_0(v *Value) bool {
 func rewriteValueWasm_OpCvt32Fto32U_0(v *Value) bool {
 	// match: (Cvt32Fto32U x)
 	// cond:
-	// result: (I64TruncF64U x)
+	// result: (I64TruncSatF64U x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64U)
+		v.reset(OpWasmI64TruncSatF64U)
 		v.AddArg(x)
 		return true
 	}
@@ -1117,10 +1123,10 @@ func rewriteValueWasm_OpCvt32Fto32U_0(v *Value) bool {
 func rewriteValueWasm_OpCvt32Fto64_0(v *Value) bool {
 	// match: (Cvt32Fto64 x)
 	// cond:
-	// result: (I64TruncF64S x)
+	// result: (I64TruncSatF64S x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64S)
+		v.reset(OpWasmI64TruncSatF64S)
 		v.AddArg(x)
 		return true
 	}
@@ -1140,10 +1146,10 @@ func rewriteValueWasm_OpCvt32Fto64F_0(v *Value) bool {
 func rewriteValueWasm_OpCvt32Fto64U_0(v *Value) bool {
 	// match: (Cvt32Fto64U x)
 	// cond:
-	// result: (I64TruncF64U x)
+	// result: (I64TruncSatF64U x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64U)
+		v.reset(OpWasmI64TruncSatF64U)
 		v.AddArg(x)
 		return true
 	}
@@ -1215,10 +1221,10 @@ func rewriteValueWasm_OpCvt32to64F_0(v *Value) bool {
 func rewriteValueWasm_OpCvt64Fto32_0(v *Value) bool {
 	// match: (Cvt64Fto32 x)
 	// cond:
-	// result: (I64TruncF64S x)
+	// result: (I64TruncSatF64S x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64S)
+		v.reset(OpWasmI64TruncSatF64S)
 		v.AddArg(x)
 		return true
 	}
@@ -1237,10 +1243,10 @@ func rewriteValueWasm_OpCvt64Fto32F_0(v *Value) bool {
 func rewriteValueWasm_OpCvt64Fto32U_0(v *Value) bool {
 	// match: (Cvt64Fto32U x)
 	// cond:
-	// result: (I64TruncF64U x)
+	// result: (I64TruncSatF64U x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64U)
+		v.reset(OpWasmI64TruncSatF64U)
 		v.AddArg(x)
 		return true
 	}
@@ -1248,10 +1254,10 @@ func rewriteValueWasm_OpCvt64Fto32U_0(v *Value) bool {
 func rewriteValueWasm_OpCvt64Fto64_0(v *Value) bool {
 	// match: (Cvt64Fto64 x)
 	// cond:
-	// result: (I64TruncF64S x)
+	// result: (I64TruncSatF64S x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64S)
+		v.reset(OpWasmI64TruncSatF64S)
 		v.AddArg(x)
 		return true
 	}
@@ -1259,10 +1265,10 @@ func rewriteValueWasm_OpCvt64Fto64_0(v *Value) bool {
 func rewriteValueWasm_OpCvt64Fto64U_0(v *Value) bool {
 	// match: (Cvt64Fto64U x)
 	// cond:
-	// result: (I64TruncF64U x)
+	// result: (I64TruncSatF64U x)
 	for {
 		x := v.Args[0]
-		v.reset(OpWasmI64TruncF64U)
+		v.reset(OpWasmI64TruncSatF64U)
 		v.AddArg(x)
 		return true
 	}
@@ -3763,6 +3769,70 @@ func rewriteValueWasm_OpPopCount8_0(v *Value) bool {
 		return true
 	}
 }
+func rewriteValueWasm_OpRotateLeft16_0(v *Value) bool {
+	b := v.Block
+	typ := &b.Func.Config.Types
+	// match: (RotateLeft16 <t> x (I64Const [c]))
+	// cond:
+	// result: (Or16 (Lsh16x64 <t> x (I64Const [c&15])) (Rsh16Ux64 <t> x (I64Const [-c&15])))
+	for {
+		t := v.Type
+		_ = v.Args[1]
+		x := v.Args[0]
+		v_1 := v.Args[1]
+		if v_1.Op != OpWasmI64Const {
+			break
+		}
+		c := v_1.AuxInt
+		v.reset(OpOr16)
+		v0 := b.NewValue0(v.Pos, OpLsh16x64, t)
+		v0.AddArg(x)
+		v1 := b.NewValue0(v.Pos, OpWasmI64Const, typ.Int64)
+		v1.AuxInt = c & 15
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v2 := b.NewValue0(v.Pos, OpRsh16Ux64, t)
+		v2.AddArg(x)
+		v3 := b.NewValue0(v.Pos, OpWasmI64Const, typ.Int64)
+		v3.AuxInt = -c & 15
+		v2.AddArg(v3)
+		v.AddArg(v2)
+		return true
+	}
+	return false
+}
+func rewriteValueWasm_OpRotateLeft32_0(v *Value) bool {
+	b := v.Block
+	typ := &b.Func.Config.Types
+	// match: (RotateLeft32 <t> x (I64Const [c]))
+	// cond:
+	// result: (Or32 (Lsh32x64 <t> x (I64Const [c&31])) (Rsh32Ux64 <t> x (I64Const [-c&31])))
+	for {
+		t := v.Type
+		_ = v.Args[1]
+		x := v.Args[0]
+		v_1 := v.Args[1]
+		if v_1.Op != OpWasmI64Const {
+			break
+		}
+		c := v_1.AuxInt
+		v.reset(OpOr32)
+		v0 := b.NewValue0(v.Pos, OpLsh32x64, t)
+		v0.AddArg(x)
+		v1 := b.NewValue0(v.Pos, OpWasmI64Const, typ.Int64)
+		v1.AuxInt = c & 31
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v2 := b.NewValue0(v.Pos, OpRsh32Ux64, t)
+		v2.AddArg(x)
+		v3 := b.NewValue0(v.Pos, OpWasmI64Const, typ.Int64)
+		v3.AuxInt = -c & 31
+		v2.AddArg(v3)
+		v.AddArg(v2)
+		return true
+	}
+	return false
+}
 func rewriteValueWasm_OpRotateLeft64_0(v *Value) bool {
 	// match: (RotateLeft64 x y)
 	// cond:
@@ -3775,6 +3845,38 @@ func rewriteValueWasm_OpRotateLeft64_0(v *Value) bool {
 		v.AddArg(y)
 		return true
 	}
+}
+func rewriteValueWasm_OpRotateLeft8_0(v *Value) bool {
+	b := v.Block
+	typ := &b.Func.Config.Types
+	// match: (RotateLeft8 <t> x (I64Const [c]))
+	// cond:
+	// result: (Or8 (Lsh8x64 <t> x (I64Const [c&7])) (Rsh8Ux64 <t> x (I64Const [-c&7])))
+	for {
+		t := v.Type
+		_ = v.Args[1]
+		x := v.Args[0]
+		v_1 := v.Args[1]
+		if v_1.Op != OpWasmI64Const {
+			break
+		}
+		c := v_1.AuxInt
+		v.reset(OpOr8)
+		v0 := b.NewValue0(v.Pos, OpLsh8x64, t)
+		v0.AddArg(x)
+		v1 := b.NewValue0(v.Pos, OpWasmI64Const, typ.Int64)
+		v1.AuxInt = c & 7
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v2 := b.NewValue0(v.Pos, OpRsh8Ux64, t)
+		v2.AddArg(x)
+		v3 := b.NewValue0(v.Pos, OpWasmI64Const, typ.Int64)
+		v3.AuxInt = -c & 7
+		v2.AddArg(v3)
+		v.AddArg(v2)
+		return true
+	}
+	return false
 }
 func rewriteValueWasm_OpRound32F_0(v *Value) bool {
 	// match: (Round32F x)

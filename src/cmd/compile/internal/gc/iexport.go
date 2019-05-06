@@ -202,13 +202,12 @@ import (
 	"bufio"
 	"bytes"
 	"cmd/compile/internal/types"
-	"cmd/internal/obj"
 	"cmd/internal/src"
 	"encoding/binary"
 	"fmt"
-	"go/ast"
 	"io"
 	"math/big"
+	"sort"
 	"strings"
 )
 
@@ -322,12 +321,12 @@ func (w *exportWriter) writeIndex(index map[*Node]uint64, mainIndex bool) {
 	for pkg, objs := range pkgObjs {
 		pkgs = append(pkgs, pkg)
 
-		obj.SortSlice(objs, func(i, j int) bool {
+		sort.Slice(objs, func(i, j int) bool {
 			return objs[i].Sym.Name < objs[j].Sym.Name
 		})
 	}
 
-	obj.SortSlice(pkgs, func(i, j int) bool {
+	sort.Slice(pkgs, func(i, j int) bool {
 		return pkgs[i].Path < pkgs[j].Path
 	})
 
@@ -1400,7 +1399,7 @@ func (w *exportWriter) localIdent(s *types.Sym, v int32) {
 		name = fmt.Sprintf("%s·%d", name, v)
 	}
 
-	if !ast.IsExported(name) && s.Pkg != w.currPkg {
+	if !types.IsExported(name) && s.Pkg != w.currPkg {
 		Fatalf("weird package in name: %v => %v, not %q", s, name, w.currPkg.Path)
 	}
 

@@ -6,6 +6,18 @@ package modload
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"go/build"
+	"internal/lazyregexp"
+	"io/ioutil"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime/debug"
+	"strconv"
+	"strings"
+
 	"cmd/go/internal/base"
 	"cmd/go/internal/cache"
 	"cmd/go/internal/cfg"
@@ -18,17 +30,6 @@ import (
 	"cmd/go/internal/mvs"
 	"cmd/go/internal/renameio"
 	"cmd/go/internal/search"
-	"encoding/json"
-	"fmt"
-	"go/build"
-	"internal/lazyregexp"
-	"io/ioutil"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime/debug"
-	"strconv"
-	"strings"
 )
 
 var (
@@ -90,7 +91,7 @@ func Init() {
 	}
 	initialized = true
 
-	env := os.Getenv("GO111MODULE")
+	env := cfg.Getenv("GO111MODULE")
 	switch env {
 	default:
 		base.Fatalf("go: unknown environment setting GO111MODULE=%s", env)
@@ -252,9 +253,11 @@ func Init() {
 func init() {
 	load.ModInit = Init
 
-	// Set modfetch.PkgMod unconditionally, so that go clean -modcache can run even without modules enabled.
+	// Set modfetch.PkgMod and codehost.WorkRoot unconditionally,
+	// so that go clean -modcache and go mod download can run even without modules enabled.
 	if list := filepath.SplitList(cfg.BuildContext.GOPATH); len(list) > 0 && list[0] != "" {
 		modfetch.PkgMod = filepath.Join(list[0], "pkg/mod")
+		codehost.WorkRoot = filepath.Join(list[0], "pkg/mod/cache/vcs")
 	}
 }
 
@@ -294,7 +297,7 @@ func die() {
 	if printStackInDie {
 		debug.PrintStack()
 	}
-	if os.Getenv("GO111MODULE") == "off" {
+	if cfg.Getenv("GO111MODULE") == "off" {
 		base.Fatalf("go: modules disabled by GO111MODULE=off; see 'go help modules'")
 	}
 	if inGOPATH && !mustUseModules {
@@ -408,9 +411,8 @@ func legacyModInit() {
 		fmt.Fprintf(os.Stderr, "go: creating new go.mod: module %s\n", path)
 		modFile = new(modfile.File)
 		modFile.AddModuleStmt(path)
+		AddGoStmt()
 	}
-
-	addGoStmt()
 
 	for _, name := range altConfigs {
 		cfg := filepath.Join(modRoot, name)
@@ -420,6 +422,7 @@ func legacyModInit() {
 			if convert == nil {
 				return
 			}
+			AddGoStmt()
 			fmt.Fprintf(os.Stderr, "go: copying requirements from %s\n", base.ShortPath(cfg))
 			cfg = filepath.ToSlash(cfg)
 			if err := modconv.ConvertLegacyConfig(modFile, cfg, data); err != nil {
@@ -434,8 +437,12 @@ func legacyModInit() {
 	}
 }
 
-// addGoStmt adds a go statement referring to the current version.
-func addGoStmt() {
+// AddGoStmt adds a go directive to the go.mod file if it does not already include one.
+// The 'go' version added, if any, is the latest version supported by this toolchain.
+func AddGoStmt() {
+	if modFile.Go != nil && modFile.Go.Version != "" {
+		return
+	}
 	tags := build.Default.ReleaseTags
 	version := tags[len(tags)-1]
 	if !strings.HasPrefix(version, "go") || !modfile.GoVersionRE.MatchString(version[2:]) {
@@ -508,7 +515,8 @@ func findModulePath(dir string) (string, error) {
 	// TODO(bcmills): once we have located a plausible module path, we should
 	// query version control (if available) to verify that it matches the major
 	// version of the most recent tag.
-	// See https://golang.org/issue/29433 and https://golang.org/issue/27009.
+	// See https://golang.org/issue/29433, https://golang.org/issue/27009, and
+	// https://golang.org/issue/31549.
 
 	// Cast about for import comments,
 	// first in top-level directory, then in subdirectories.
@@ -559,17 +567,18 @@ func findModulePath(dir string) (string, error) {
 		}
 	}
 
-	// Look for .git/config with github origin as last resort.
-	data, _ = ioutil.ReadFile(filepath.Join(dir, ".git/config"))
-	if m := gitOriginRE.FindSubmatch(data); m != nil {
-		return "github.com/" + string(m[1]), nil
-	}
+	msg := `cannot determine module path for source directory %s (outside GOPATH, module path must be specified)
 
-	return "", fmt.Errorf("cannot determine module path for source directory %s (outside GOPATH, module path not specified)", dir)
+Example usage:
+	'go mod init example.com/m' to initialize a v0 or v1 module
+	'go mod init example.com/m/v2' to initialize a v2 module
+
+Run 'go help mod init' for more information.
+`
+	return "", fmt.Errorf(msg, dir)
 }
 
 var (
-	gitOriginRE     = lazyregexp.New(`(?m)^\[remote "origin"\]\r?\n\turl = (?:https://github.com/|git@github.com:|gh:)([^/]+/[^/]+?)(\.git)?\r?\n`)
 	importCommentRE = lazyregexp.New(`(?m)^package[ \t]+[^ \t\r\n/]+[ \t]+//[ \t]+import[ \t]+(\"[^"]+\")[ \t]*\r?\n`)
 )
 

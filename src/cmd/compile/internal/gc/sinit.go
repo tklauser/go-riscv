@@ -954,52 +954,48 @@ func maplit(n *Node, m *Node, init *Nodes) {
 	a.List.Set2(typenod(n.Type), nodintconst(int64(n.List.Len())))
 	litas(m, a, init)
 
-	// Split the initializers into static and dynamic.
-	var stat, dyn []*Node
-	for _, r := range n.List.Slice() {
-		if r.Op != OKEY {
-			Fatalf("maplit: rhs not OKEY: %v", r)
-		}
-		if isStaticCompositeLiteral(r.Left) && isStaticCompositeLiteral(r.Right) {
-			stat = append(stat, r)
-		} else {
-			dyn = append(dyn, r)
+	entries := n.List.Slice()
+
+	// The order pass already removed any dynamic (runtime-computed) entries.
+	// All remaining entries are static. Double-check that.
+	for _, r := range entries {
+		if !isStaticCompositeLiteral(r.Left) || !isStaticCompositeLiteral(r.Right) {
+			Fatalf("maplit: entry is not a literal: %v", r)
 		}
 	}
 
-	// Add static entries.
-	if len(stat) > 25 {
-		// For a large number of static entries, put them in an array and loop.
+	if len(entries) > 25 {
+		// For a large number of entries, put them in an array and loop.
 
 		// build types [count]Tindex and [count]Tvalue
-		tk := types.NewArray(n.Type.Key(), int64(len(stat)))
-		tv := types.NewArray(n.Type.Elem(), int64(len(stat)))
+		tk := types.NewArray(n.Type.Key(), int64(len(entries)))
+		te := types.NewArray(n.Type.Elem(), int64(len(entries)))
 
 		// TODO(josharian): suppress alg generation for these types?
 		dowidth(tk)
-		dowidth(tv)
+		dowidth(te)
 
 		// make and initialize static arrays
 		vstatk := staticname(tk)
 		vstatk.Name.SetReadonly(true)
-		vstatv := staticname(tv)
-		vstatv.Name.SetReadonly(true)
+		vstate := staticname(te)
+		vstate.Name.SetReadonly(true)
 
 		datak := nod(OARRAYLIT, nil, nil)
-		datav := nod(OARRAYLIT, nil, nil)
-		for _, r := range stat {
+		datae := nod(OARRAYLIT, nil, nil)
+		for _, r := range entries {
 			datak.List.Append(r.Left)
-			datav.List.Append(r.Right)
+			datae.List.Append(r.Right)
 		}
 		fixedlit(inInitFunction, initKindStatic, datak, vstatk, init)
-		fixedlit(inInitFunction, initKindStatic, datav, vstatv, init)
+		fixedlit(inInitFunction, initKindStatic, datae, vstate, init)
 
 		// loop adding structure elements to map
 		// for i = 0; i < len(vstatk); i++ {
-		//	map[vstatk[i]] = vstatv[i]
+		//	map[vstatk[i]] = vstate[i]
 		// }
 		i := temp(types.Types[TINT])
-		rhs := nod(OINDEX, vstatv, i)
+		rhs := nod(OINDEX, vstate, i)
 		rhs.SetBounded(true)
 
 		kidx := nod(OINDEX, vstatk, i)
@@ -1018,58 +1014,42 @@ func maplit(n *Node, m *Node, init *Nodes) {
 		loop = typecheck(loop, ctxStmt)
 		loop = walkstmt(loop)
 		init.Append(loop)
-	} else {
-		// For a small number of static entries, just add them directly.
-		addMapEntries(m, stat, init)
-	}
-
-	// Add dynamic entries.
-	addMapEntries(m, dyn, init)
-}
-
-func addMapEntries(m *Node, dyn []*Node, init *Nodes) {
-	if len(dyn) == 0 {
 		return
 	}
-
-	nerr := nerrors
+	// For a small number of entries, just add them directly.
 
 	// Build list of var[c] = expr.
-	// Use temporaries so that mapassign1 can have addressable key, val.
+	// Use temporaries so that mapassign1 can have addressable key, elem.
 	// TODO(josharian): avoid map key temporaries for mapfast_* assignments with literal keys.
-	key := temp(m.Type.Key())
-	val := temp(m.Type.Elem())
+	tmpkey := temp(m.Type.Key())
+	tmpelem := temp(m.Type.Elem())
 
-	for _, r := range dyn {
-		index, value := r.Left, r.Right
+	for _, r := range entries {
+		index, elem := r.Left, r.Right
 
 		setlineno(index)
-		a := nod(OAS, key, index)
+		a := nod(OAS, tmpkey, index)
 		a = typecheck(a, ctxStmt)
 		a = walkstmt(a)
 		init.Append(a)
 
-		setlineno(value)
-		a = nod(OAS, val, value)
+		setlineno(elem)
+		a = nod(OAS, tmpelem, elem)
 		a = typecheck(a, ctxStmt)
 		a = walkstmt(a)
 		init.Append(a)
 
-		setlineno(val)
-		a = nod(OAS, nod(OINDEX, m, key), val)
+		setlineno(tmpelem)
+		a = nod(OAS, nod(OINDEX, m, tmpkey), tmpelem)
 		a = typecheck(a, ctxStmt)
 		a = walkstmt(a)
 		init.Append(a)
-
-		if nerr != nerrors {
-			break
-		}
 	}
 
-	a := nod(OVARKILL, key, nil)
+	a = nod(OVARKILL, tmpkey, nil)
 	a = typecheck(a, ctxStmt)
 	init.Append(a)
-	a = nod(OVARKILL, val, nil)
+	a = nod(OVARKILL, tmpelem, nil)
 	a = typecheck(a, ctxStmt)
 	init.Append(a)
 }
@@ -1079,6 +1059,11 @@ func anylit(n *Node, var_ *Node, init *Nodes) {
 	switch n.Op {
 	default:
 		Fatalf("anylit: not lit, op=%v node=%v", n.Op, n)
+
+	case ONAME:
+		a := nod(OAS, var_, n)
+		a = typecheck(a, ctxStmt)
+		init.Append(a)
 
 	case OPTRLIT:
 		if !t.IsPtr() {
@@ -1277,6 +1262,9 @@ func (s *InitSchedule) initplan(n *Node) {
 		for _, a := range n.List.Slice() {
 			if a.Op != OSTRUCTKEY {
 				Fatalf("initplan structlit")
+			}
+			if a.Sym.IsBlank() {
+				continue
 			}
 			s.addvalue(p, a.Xoffset, a.Left)
 		}

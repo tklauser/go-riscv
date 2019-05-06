@@ -197,6 +197,8 @@ var machohdr MachoHdr
 
 var load []MachoLoad
 
+var machoPlatform MachoPlatform
+
 var seg [16]MachoSeg
 
 var nseg int
@@ -388,6 +390,36 @@ func (ctxt *Link) domacho() {
 		return
 	}
 
+	// Copy platform load command.
+	for _, h := range hostobj {
+		load, err := hostobjMachoPlatform(&h)
+		if err != nil {
+			Exitf("%v", err)
+		}
+		if load != nil {
+			machoPlatform = load.platform
+			ml := newMachoLoad(ctxt.Arch, load.cmd.type_, uint32(len(load.cmd.data)))
+			copy(ml.data, load.cmd.data)
+			break
+		}
+	}
+	if machoPlatform == 0 {
+		machoPlatform = PLATFORM_MACOS
+		if ctxt.LinkMode == LinkInternal {
+			// For lldb, must say LC_VERSION_MIN_MACOSX or else
+			// it won't know that this Mach-O binary is from OS X
+			// (could be iOS or WatchOS instead).
+			// Go on iOS uses linkmode=external, and linkmode=external
+			// adds this itself. So we only need this code for linkmode=internal
+			// and we can assume OS X.
+			//
+			// See golang.org/issues/12941.
+			ml := newMachoLoad(ctxt.Arch, LC_VERSION_MIN_MACOSX, 2)
+			ml.data[0] = 10<<16 | 7<<8 | 0<<0 // OS X version 10.7.0
+			ml.data[1] = 10<<16 | 7<<8 | 0<<0 // SDK 10.7.0
+		}
+	}
+
 	// empirically, string table must begin with " \x00".
 	s := ctxt.Syms.Lookup(".machosymstr", 0)
 
@@ -560,12 +592,8 @@ func Asmbmacho(ctxt *Link) {
 		ms = newMachoSeg("", 40)
 
 		ms.fileoffset = Segtext.Fileoff
-		if ctxt.Arch.Family == sys.ARM || ctxt.BuildMode == BuildModeCArchive {
-			ms.filesize = Segdata.Fileoff + Segdata.Filelen - Segtext.Fileoff
-		} else {
-			ms.filesize = Segdwarf.Fileoff + Segdwarf.Filelen - Segtext.Fileoff
-			ms.vsize = Segdwarf.Vaddr + Segdwarf.Length - Segtext.Vaddr
-		}
+		ms.filesize = Segdwarf.Fileoff + Segdwarf.Filelen - Segtext.Fileoff
+		ms.vsize = Segdwarf.Vaddr + Segdwarf.Length - Segtext.Vaddr
 	}
 
 	/* segment for zero page */
@@ -694,32 +722,6 @@ func Asmbmacho(ctxt *Link) {
 			}
 		}
 	}
-	foundLoad := false
-	for _, h := range hostobj {
-		load, err := hostobjMachoPlatform(&h)
-		if err != nil {
-			Exitf("%v", err)
-		}
-		if load != nil {
-			ml := newMachoLoad(ctxt.Arch, load.cmd.type_, uint32(len(load.cmd.data)))
-			copy(ml.data, load.cmd.data)
-			foundLoad = true
-			break
-		}
-	}
-	if !foundLoad && ctxt.LinkMode == LinkInternal {
-		// For lldb, must say LC_VERSION_MIN_MACOSX or else
-		// it won't know that this Mach-O binary is from OS X
-		// (could be iOS or WatchOS instead).
-		// Go on iOS uses linkmode=external, and linkmode=external
-		// adds this itself. So we only need this code for linkmode=internal
-		// and we can assume OS X.
-		//
-		// See golang.org/issues/12941.
-		ml := newMachoLoad(ctxt.Arch, LC_VERSION_MIN_MACOSX, 2)
-		ml.data[0] = 10<<16 | 7<<8 | 0<<0 // OS X version 10.7.0
-		ml.data[1] = 10<<16 | 7<<8 | 0<<0 // SDK 10.7.0
-	}
 
 	a := machowrite(ctxt.Arch, ctxt.Out, ctxt.LinkMode)
 	if int32(a) > HEADR {
@@ -784,6 +786,27 @@ func (x machoscmp) Less(i, j int) bool {
 func machogenasmsym(ctxt *Link) {
 	genasmsym(ctxt, addsym)
 	for _, s := range ctxt.Syms.Allsym {
+		// Some 64-bit functions have a "$INODE64" or "$INODE64$UNIX2003" suffix.
+		if s.Type == sym.SDYNIMPORT && s.Dynimplib() == "/usr/lib/libSystem.B.dylib" {
+			// But only on macOS.
+			if machoPlatform == PLATFORM_MACOS {
+				switch n := s.Extname(); n {
+				case "fdopendir":
+					switch objabi.GOARCH {
+					case "amd64":
+						s.SetExtname(n + "$INODE64")
+					case "386":
+						s.SetExtname(n + "$INODE64$UNIX2003")
+					}
+				case "readdir_r", "getfsstat":
+					switch objabi.GOARCH {
+					case "amd64", "386":
+						s.SetExtname(n + "$INODE64")
+					}
+				}
+			}
+		}
+
 		if s.Type == sym.SDYNIMPORT || s.Type == sym.SHOSTOBJ {
 			if s.Attr.Reachable() {
 				addsym(ctxt, s, "", DataSym, 0, nil)
@@ -832,7 +855,7 @@ func machoShouldExport(ctxt *Link, s *sym.Symbol) bool {
 	if strings.HasPrefix(s.Name, "go.link.pkghash") {
 		return true
 	}
-	return s.Type >= sym.SELFSECT // only writable sections
+	return s.Type >= sym.SFirstWritable // only writable sections
 }
 
 func machosymtab(ctxt *Link) {

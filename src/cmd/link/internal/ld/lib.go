@@ -127,8 +127,15 @@ type Arch struct {
 	// offset value.
 	Archrelocvariant func(link *Link, rel *sym.Reloc, sym *sym.Symbol,
 		offset int64) (relocatedOffset int64)
-	Trampoline  func(*Link, *sym.Reloc, *sym.Symbol)
-	Asmb        func(*Link)
+	Trampoline func(*Link, *sym.Reloc, *sym.Symbol)
+
+	// Asmb and Asmb2 are arch-specific routines that write the output
+	// file. Typically, Asmb writes most of the content (sections and
+	// segments), for which we have computed the size and offset. Asmb2
+	// writes the rest.
+	Asmb  func(*Link)
+	Asmb2 func(*Link)
+
 	Elfreloc1   func(*Link, *sym.Reloc, int64) bool
 	Elfsetupplt func(*Link)
 	Gentext     func(*Link)
@@ -261,7 +268,7 @@ func libinit(ctxt *Link) {
 	Lflag(ctxt, filepath.Join(objabi.GOROOT, "pkg", fmt.Sprintf("%s_%s%s%s", objabi.GOOS, objabi.GOARCH, suffixsep, suffix)))
 
 	mayberemoveoutfile()
-	f, err := os.OpenFile(*flagOutfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0775)
+	f, err := os.OpenFile(*flagOutfile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
 	if err != nil {
 		Exitf("cannot create %s: %v", *flagOutfile, err)
 	}
@@ -1014,7 +1021,7 @@ func hostlinksetup(ctxt *Link) {
 
 	p := filepath.Join(*flagTmpdir, "go.o")
 	var err error
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0775)
+	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
 	if err != nil {
 		Exitf("cannot create %s: %v", p, err)
 	}
@@ -1475,12 +1482,8 @@ func (ctxt *Link) hostlink() {
 		if err != nil {
 			Exitf("%s: parsing Mach-O header failed: %v", os.Args[0], err)
 		}
-		load, err := peekMachoPlatform(exem)
-		if err != nil {
-			Exitf("%s: failed to parse Mach-O load commands: %v", os.Args[0], err)
-		}
 		// Only macOS supports unmapped segments such as our __DWARF segment.
-		if load == nil || load.platform == PLATFORM_MACOS {
+		if machoPlatform == PLATFORM_MACOS {
 			if err := machoCombineDwarf(ctxt, exef, exem, dsym, combinedOutput); err != nil {
 				Exitf("%s: combining dwarf failed: %v", os.Args[0], err)
 			}
@@ -2112,9 +2115,9 @@ func stkcheck(ctxt *Link, up *chain, depth int) int {
 
 	endr := len(s.R)
 	var ch1 chain
-	var pcsp Pciter
+	pcsp := newPCIter(ctxt)
 	var r *sym.Reloc
-	for pciterinit(ctxt, &pcsp, &s.FuncInfo.Pcsp); pcsp.done == 0; pciternext(&pcsp) {
+	for pcsp.init(s.FuncInfo.Pcsp.P); !pcsp.done; pcsp.next() {
 		// pcsp.value is in effect for [pcsp.pc, pcsp.nextpc).
 
 		// Check stack size in effect for this span.
@@ -2262,11 +2265,23 @@ func genasmsym(ctxt *Link, put func(*Link, *sym.Symbol, string, SymbolType, int6
 		}
 	}
 
-	for _, s := range ctxt.Syms.Allsym {
+	shouldBeInSymbolTable := func(s *sym.Symbol) bool {
 		if s.Attr.NotInSymbolTable() {
-			continue
+			return false
+		}
+		if ctxt.HeadType == objabi.Haix && s.Name == ".go.buildinfo" {
+			// On AIX, .go.buildinfo must be in the symbol table as
+			// it has relocations.
+			return true
 		}
 		if (s.Name == "" || s.Name[0] == '.') && !s.IsFileLocal() && s.Name != ".rathole" && s.Name != ".TOC." {
+			return false
+		}
+		return true
+	}
+
+	for _, s := range ctxt.Syms.Allsym {
+		if !shouldBeInSymbolTable(s) {
 			continue
 		}
 		switch s.Type {
@@ -2477,7 +2492,7 @@ func (ctxt *Link) callgraph() {
 			if r.Sym == nil {
 				continue
 			}
-			if (r.Type == objabi.R_CALL || r.Type == objabi.R_CALLARM || r.Type == objabi.R_CALLPOWER || r.Type == objabi.R_CALLMIPS) && r.Sym.Type == sym.STEXT {
+			if (r.Type == objabi.R_CALL || r.Type == objabi.R_CALLARM || r.Type == objabi.R_CALLARM64 || r.Type == objabi.R_CALLPOWER || r.Type == objabi.R_CALLMIPS) && r.Sym.Type == sym.STEXT {
 				ctxt.Logf("%s calls %s\n", s.Name, r.Sym.Name)
 			}
 		}

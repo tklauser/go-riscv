@@ -5,6 +5,7 @@
 package os_test
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	. "os"
@@ -158,7 +159,7 @@ func TestRemoveAllLarge(t *testing.T) {
 
 func TestRemoveAllLongPath(t *testing.T) {
 	switch runtime.GOOS {
-	case "aix", "darwin", "dragonfly", "freebsd", "linux", "netbsd", "openbsd", "solaris":
+	case "aix", "darwin", "dragonfly", "freebsd", "linux", "netbsd", "openbsd", "illumos", "solaris":
 		break
 	default:
 		t.Skip("skipping for not implemented platforms")
@@ -403,5 +404,51 @@ func TestRemoveUnreadableDir(t *testing.T) {
 	}
 	if err := RemoveAll(filepath.Join(tempDir, "d0")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Issue 29921
+func TestRemoveAllWithMoreErrorThanReqSize(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+
+	defer func(oldHook func(error) error) {
+		*RemoveAllTestHook = oldHook
+	}(*RemoveAllTestHook)
+
+	*RemoveAllTestHook = func(err error) error {
+		return errors.New("error from RemoveAllTestHook")
+	}
+
+	tmpDir, err := ioutil.TempDir("", "TestRemoveAll-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer RemoveAll(tmpDir)
+
+	path := filepath.Join(tmpDir, "_TestRemoveAllWithMoreErrorThanReqSize_")
+
+	// Make directory with 1025 files and remove.
+	if err := MkdirAll(path, 0777); err != nil {
+		t.Fatalf("MkdirAll %q: %s", path, err)
+	}
+	for i := 0; i < 1025; i++ {
+		fpath := filepath.Join(path, fmt.Sprintf("file%d", i))
+		fd, err := Create(fpath)
+		if err != nil {
+			t.Fatalf("create %q: %s", fpath, err)
+		}
+		fd.Close()
+	}
+
+	// This call should not hang
+	if err := RemoveAll(path); err == nil {
+		t.Fatal("Want error from RemoveAllTestHook, got nil")
+	}
+
+	// We hook to inject error, but the actual files must be deleted
+	if _, err := Lstat(path); err == nil {
+		t.Fatal("directory must be deleted even with removeAllTetHook run")
 	}
 }

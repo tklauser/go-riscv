@@ -28,6 +28,11 @@ const (
 	SYS_FCNTL
 )
 
+const (
+	// AF_LOCAL doesn't exist on AIX
+	AF_LOCAL = AF_UNIX
+)
+
 func (ts *StTimespec_t) Unix() (sec int64, nsec int64) {
 	return int64(ts.Sec), int64(ts.Nsec)
 }
@@ -225,8 +230,11 @@ func Wait4(pid int, wstatus *WaitStatus, options int, rusage *Rusage) (wpid int,
 //sys	recvfrom(fd int, p []byte, flags int, from *RawSockaddrAny, fromlen *_Socklen) (n int, err error)
 //sys	sendto(s int, buf []byte, flags int, to unsafe.Pointer, addrlen _Socklen) (err error)
 //sys	Shutdown(s int, how int) (err error)
-//sys	recvmsg(s int, msg *Msghdr, flags int) (n int, err error)
-//sys	sendmsg(s int, msg *Msghdr, flags int) (n int, err error)
+
+// In order to use msghdr structure with Control, Controllen in golang.org/x/net,
+// nrecvmsg and nsendmsg must be used.
+//sys	recvmsg(s int, msg *Msghdr, flags int) (n int, err error) = nrecvmsg
+//sys	sendmsg(s int, msg *Msghdr, flags int) (n int, err error) = nsendmsg
 
 func (sa *SockaddrInet4) sockaddr() (unsafe.Pointer, _Socklen, error) {
 	if sa.Port < 0 || sa.Port > 0xFFFF {
@@ -442,6 +450,18 @@ func anyToSockaddr(rsa *RawSockaddrAny) (Sockaddr, error) {
 	return nil, EAFNOSUPPORT
 }
 
+type SockaddrDatalink struct {
+	Len    uint8
+	Family uint8
+	Index  uint16
+	Type   uint8
+	Nlen   uint8
+	Alen   uint8
+	Slen   uint8
+	Data   [120]uint8
+	raw    RawSockaddrDatalink
+}
+
 /*
  * Wait
  */
@@ -586,6 +606,7 @@ func PtraceDetach(pid int) (err error) { return ptrace64(PT_DETACH, int64(pid), 
 //sys	Geteuid() (euid int)
 //sys	Getegid() (egid int)
 //sys	Getppid() (ppid int)
+//sys	Getpriority(which int, who int) (n int, err error)
 //sysnb	Getrlimit(which int, lim *Rlimit) (err error)
 //sysnb	Getuid() (uid int)
 //sys	Kill(pid int, signum Signal) (err error)
@@ -608,6 +629,7 @@ func PtraceDetach(pid int) (err error) { return ptrace64(PT_DETACH, int64(pid), 
 //sysnb	Seteuid(euid int) (err error)
 //sysnb	Setgid(gid int) (err error)
 //sysnb	Setpgid(pid int, pgid int) (err error)
+//sys	Setpriority(which int, who int, prio int) (err error)
 //sysnb	Setregid(rgid int, egid int) (err error)
 //sysnb	Setreuid(ruid int, euid int) (err error)
 //sysnb	Setrlimit(which int, lim *Rlimit) (err error)

@@ -831,7 +831,7 @@ func TestHelperProcess(*testing.T) {
 			// the cloned file descriptors that result from opening
 			// /dev/urandom.
 			// https://golang.org/issue/3955
-		case "solaris":
+		case "illumos", "solaris":
 			// TODO(aram): This fails on Solaris because libc opens
 			// its own files, as it sees fit. Darwin does the same,
 			// see: https://golang.org/issue/2603
@@ -1182,5 +1182,24 @@ func TestStringPathNotResolved(t *testing.T) {
 	want := "makemeasandwich -lettuce"
 	if got := cmd.String(); got != want {
 		t.Errorf("String(%q, %q) = %q, want %q", "makemeasandwich", "-lettuce", got, want)
+	}
+}
+
+// start a child process without the user code explicitly starting
+// with a copy of the parent's. (The Windows SYSTEMROOT issue: Issue
+// 25210)
+func TestChildCriticalEnv(t *testing.T) {
+	testenv.MustHaveExec(t)
+	if runtime.GOOS != "windows" {
+		t.Skip("only testing on Windows")
+	}
+	cmd := helperCommand(t, "echoenv", "SYSTEMROOT")
+	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		t.Error("no SYSTEMROOT found")
 	}
 }

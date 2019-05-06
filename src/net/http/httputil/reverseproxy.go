@@ -132,16 +132,6 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
-func cloneHeader(h http.Header) http.Header {
-	h2 := make(http.Header, len(h))
-	for k, vv := range h {
-		vv2 := make([]string, len(vv))
-		copy(vv2, vv)
-		h2[k] = vv2
-	}
-	return h2
-}
-
 // Hop-by-hop headers. These are removed when sent to the backend.
 // As of RFC 7230, hop-by-hop headers are required to appear in the
 // Connection header field. These are the headers defined by the
@@ -206,12 +196,10 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}()
 	}
 
-	outreq := req.WithContext(ctx) // includes shallow copies of maps, but okay
+	outreq := req.Clone(ctx)
 	if req.ContentLength == 0 {
 		outreq.Body = nil // Issue 16036: nil Body for http.Transport retries
 	}
-
-	outreq.Header = cloneHeader(req.Header)
 
 	p.Director(outreq)
 	outreq.Close = false

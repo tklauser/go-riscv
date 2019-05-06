@@ -59,13 +59,26 @@ var sysdir = func() *sysDir {
 			if err != nil {
 				wd = err.Error()
 			}
-			return &sysDir{
+			sd := &sysDir{
 				filepath.Join(wd, "..", ".."),
 				[]string{
 					"ResourceRules.plist",
 					"Info.plist",
 				},
 			}
+			found := true
+			for _, f := range sd.files {
+				path := filepath.Join(sd.name, f)
+				if _, err := Stat(path); err != nil {
+					found = false
+					break
+				}
+			}
+			if found {
+				return sd
+			}
+			// In a self-hosted iOS build the above files might
+			// not exist. Look for system files instead below.
 		}
 	case "windows":
 		return &sysDir{
@@ -1185,21 +1198,25 @@ func TestChdirAndGetwd(t *testing.T) {
 	// /usr/bin does not usually exist on Plan 9 or Android.
 	switch runtime.GOOS {
 	case "android":
-		dirs = []string{"/", "/system/bin"}
+		dirs = []string{"/system/bin"}
 	case "plan9":
 		dirs = []string{"/", "/usr"}
 	case "darwin":
 		switch runtime.GOARCH {
 		case "arm", "arm64":
-			d1, err := ioutil.TempDir("", "d1")
-			if err != nil {
-				t.Fatalf("TempDir: %v", err)
+			dirs = nil
+			for _, d := range []string{"d1", "d2"} {
+				dir, err := ioutil.TempDir("", d)
+				if err != nil {
+					t.Fatalf("TempDir: %v", err)
+				}
+				// Expand symlinks so path equality tests work.
+				dir, err = filepath.EvalSymlinks(dir)
+				if err != nil {
+					t.Fatalf("EvalSymlinks: %v", err)
+				}
+				dirs = append(dirs, dir)
 			}
-			d2, err := ioutil.TempDir("", "d2")
-			if err != nil {
-				t.Fatalf("TempDir: %v", err)
-			}
-			dirs = []string{d1, d2}
 		}
 	}
 	oldwd := Getenv("PWD")
@@ -2226,8 +2243,8 @@ func TestPipeThreads(t *testing.T) {
 	switch runtime.GOOS {
 	case "freebsd":
 		t.Skip("skipping on FreeBSD; issue 19093")
-	case "solaris":
-		t.Skip("skipping on Solaris; issue 19111")
+	case "illumos", "solaris":
+		t.Skip("skipping on Solaris and illumos; issue 19111")
 	case "windows":
 		t.Skip("skipping on Windows; issue 19098")
 	case "plan9":

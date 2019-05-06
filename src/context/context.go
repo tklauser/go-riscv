@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package context defines the Context type, which carries deadlines,
-// cancelation signals, and other request-scoped values across API boundaries
+// cancellation signals, and other request-scoped values across API boundaries
 // and between processes.
 //
 // Incoming requests to a server should create a Context, and outgoing
@@ -49,12 +49,13 @@ package context
 
 import (
 	"errors"
+	"internal/oserror"
 	"internal/reflectlite"
 	"sync"
 	"time"
 )
 
-// A Context carries a deadline, a cancelation signal, and other values across
+// A Context carries a deadline, a cancellation signal, and other values across
 // API boundaries.
 //
 // Context's methods may be called by multiple goroutines simultaneously.
@@ -92,7 +93,7 @@ type Context interface {
 	//  }
 	//
 	// See https://blog.golang.org/pipelines for more examples of how to use
-	// a Done channel for cancelation.
+	// a Done channel for cancellation.
 	Done() <-chan struct{}
 
 	// If Done is not yet closed, Err returns nil.
@@ -162,6 +163,9 @@ type deadlineExceededError struct{}
 func (deadlineExceededError) Error() string   { return "context deadline exceeded" }
 func (deadlineExceededError) Timeout() bool   { return true }
 func (deadlineExceededError) Temporary() bool { return true }
+func (deadlineExceededError) Is(target error) bool {
+	return target == oserror.ErrTimeout || target == oserror.ErrTemporary
+}
 
 // An emptyCtx is never canceled, has no values, and has no deadline. It is not
 // struct{}, since vars of this type must have distinct addresses.
@@ -497,10 +501,10 @@ type valueCtx struct {
 // want context depending on the unicode tables. This is only used by
 // *valueCtx.String().
 func stringify(v interface{}) string {
-	if s, ok := v.(stringer); ok {
+	switch s := v.(type) {
+	case stringer:
 		return s.String()
-	}
-	if s, ok := v.(string); ok {
+	case string:
 		return s
 	}
 	return "<not Stringer>"

@@ -136,7 +136,9 @@ nocpuinfo:
 	MOVQ	$setg_gcc<>(SB), SI // arg 2: setg_gcc
 #ifdef GOOS_android
 	MOVQ	$runtime·tls_g(SB), DX 	// arg 3: &tls_g
-	MOVQ	0(TLS), CX	// arg 4: TLS base, stored in the first slot (TLS_SLOT_SELF).
+	// arg 4: TLS base, stored in slot 0 (Android's TLS_SLOT_SELF).
+	// Compensate for tls_g (+16).
+	MOVQ	-16(TLS), CX
 #else
 	MOVQ	$0, DX	// arg 3, 4: not used when using platform's TLS
 	MOVQ	$0, CX
@@ -167,6 +169,10 @@ needtls:
 #endif
 #ifdef GOOS_solaris
 	// skip TLS setup on Solaris
+	JMP ok
+#endif
+#ifdef GOOS_illumos
+	// skip TLS setup on illumos
 	JMP ok
 #endif
 #ifdef GOOS_darwin
@@ -1610,6 +1616,8 @@ restore:
 
 	RET
 
+// runtime.debugCallCheck assumes that functions defined with the
+// DEBUG_CALL_FN macro are safe points to inject calls.
 #define DEBUG_CALL_FN(NAME,MAXSIZE)		\
 TEXT NAME(SB),WRAPPER,$MAXSIZE-0;		\
 	NO_LOCAL_POINTERS;			\
@@ -1713,5 +1721,8 @@ TEXT runtime·panicSlice3CU(SB),NOSPLIT,$0-16
 	JMP	runtime·goPanicSlice3CU(SB)
 
 #ifdef GOOS_android
+// Use the free TLS_SLOT_APP slot #2 on Android Q.
+// Earlier androids are set up in gcc_android.c.
+DATA runtime·tls_g+0(SB)/8, $16
 GLOBL runtime·tls_g+0(SB), NOPTR, $8
 #endif

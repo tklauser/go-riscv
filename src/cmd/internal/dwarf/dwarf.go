@@ -91,18 +91,19 @@ type Range struct {
 // This container is used by the PutFunc* variants below when
 // creating the DWARF subprogram DIE(s) for a function.
 type FnState struct {
-	Name       string
-	Importpath string
-	Info       Sym
-	Filesym    Sym
-	Loc        Sym
-	Ranges     Sym
-	Absfn      Sym
-	StartPC    Sym
-	Size       int64
-	External   bool
-	Scopes     []Scope
-	InlCalls   InlCalls
+	Name          string
+	Importpath    string
+	Info          Sym
+	Filesym       Sym
+	Loc           Sym
+	Ranges        Sym
+	Absfn         Sym
+	StartPC       Sym
+	Size          int64
+	External      bool
+	Scopes        []Scope
+	InlCalls      InlCalls
+	UseBASEntries bool
 }
 
 func EnableLogging(doit bool) {
@@ -181,6 +182,7 @@ type Context interface {
 	AddInt(s Sym, size int, i int64)
 	AddBytes(s Sym, b []byte)
 	AddAddress(s Sym, t interface{}, ofs int64)
+	AddCURelativeAddress(s Sym, t interface{}, ofs int64)
 	AddSectionOffset(s Sym, size int, t interface{}, ofs int64)
 	AddDWARFAddrSectionOffset(s Sym, t interface{}, ofs int64)
 	CurrentOffset(s Sym) int64
@@ -298,6 +300,8 @@ const (
 	DW_AT_go_embedded_field = 0x2903
 	DW_AT_go_runtime_type   = 0x2904
 
+	DW_AT_go_package_name = 0x2905 // Attribute for DW_TAG_compile_unit
+
 	DW_AT_internal_location = 253 // params and locals; not emitted
 )
 
@@ -369,6 +373,7 @@ var abbrevs = [DW_NABRV]dwAbbrev{
 			{DW_AT_ranges, DW_FORM_sec_offset},
 			{DW_AT_comp_dir, DW_FORM_string},
 			{DW_AT_producer, DW_FORM_string},
+			{DW_AT_go_package_name, DW_FORM_string},
 		},
 	},
 
@@ -381,6 +386,7 @@ var abbrevs = [DW_NABRV]dwAbbrev{
 			{DW_AT_language, DW_FORM_data1},
 			{DW_AT_comp_dir, DW_FORM_string},
 			{DW_AT_producer, DW_FORM_string},
+			{DW_AT_go_package_name, DW_FORM_string},
 		},
 	},
 
@@ -983,22 +989,40 @@ func PutIntConst(ctxt Context, info, typ Sym, name string, val int64) {
 	putattr(ctxt, info, DW_ABRV_INT_CONSTANT, DW_FORM_sdata, DW_CLS_CONSTANT, val, nil)
 }
 
-// PutRanges writes a range table to sym. All addresses in ranges are
-// relative to some base address. If base is not nil, then they're
-// relative to the start of base. If base is nil, then the caller must
-// arrange a base address some other way (such as a DW_AT_low_pc
-// attribute).
-func PutRanges(ctxt Context, sym Sym, base Sym, ranges []Range) {
+// PutBasedRanges writes a range table to sym. All addresses in ranges are
+// relative to some base address, which must be arranged by the caller
+// (e.g., with a DW_AT_low_pc attribute, or in a BASE-prefixed range).
+func PutBasedRanges(ctxt Context, sym Sym, ranges []Range) {
 	ps := ctxt.PtrSize()
-	// Write base address entry.
-	if base != nil {
-		ctxt.AddInt(sym, ps, -1)
-		ctxt.AddAddress(sym, base, 0)
-	}
 	// Write ranges.
 	for _, r := range ranges {
 		ctxt.AddInt(sym, ps, r.Start)
 		ctxt.AddInt(sym, ps, r.End)
+	}
+	// Write trailer.
+	ctxt.AddInt(sym, ps, 0)
+	ctxt.AddInt(sym, ps, 0)
+}
+
+// PutRanges writes a range table to s.Ranges.
+// All addresses in ranges are relative to s.base.
+func (s *FnState) PutRanges(ctxt Context, ranges []Range) {
+	ps := ctxt.PtrSize()
+	sym, base := s.Ranges, s.StartPC
+
+	if s.UseBASEntries {
+		// Using a Base Address Selection Entry reduces the number of relocations, but
+		// this is not done on macOS because it is not supported by dsymutil/dwarfdump/lldb
+		ctxt.AddInt(sym, ps, -1)
+		ctxt.AddAddress(sym, base, 0)
+		PutBasedRanges(ctxt, sym, ranges)
+		return
+	}
+
+	// Write ranges full of relocations
+	for _, r := range ranges {
+		ctxt.AddCURelativeAddress(sym, base, r.Start)
+		ctxt.AddCURelativeAddress(sym, base, r.End)
 	}
 	// Write trailer.
 	ctxt.AddInt(sym, ps, 0)
@@ -1198,7 +1222,7 @@ func PutInlinedFunc(ctxt Context, s *FnState, callersym Sym, callIdx int) error 
 
 	if abbrev == DW_ABRV_INLINED_SUBROUTINE_RANGES {
 		putattr(ctxt, s.Info, abbrev, DW_FORM_sec_offset, DW_CLS_PTR, s.Ranges.Len(), s.Ranges)
-		PutRanges(ctxt, s.Ranges, s.StartPC, ic.Ranges)
+		s.PutRanges(ctxt, ic.Ranges)
 	} else {
 		st := ic.Ranges[0].Start
 		en := ic.Ranges[0].End
@@ -1353,7 +1377,7 @@ func putscope(ctxt Context, s *FnState, scopes []Scope, curscope int32, fnabbrev
 			Uleb128put(ctxt, s.Info, DW_ABRV_LEXICAL_BLOCK_RANGES)
 			putattr(ctxt, s.Info, DW_ABRV_LEXICAL_BLOCK_RANGES, DW_FORM_sec_offset, DW_CLS_PTR, s.Ranges.Len(), s.Ranges)
 
-			PutRanges(ctxt, s.Ranges, s.StartPC, scope.Ranges)
+			s.PutRanges(ctxt, scope.Ranges)
 		}
 
 		curscope = putscope(ctxt, s, scopes, curscope, fnabbrev, encbuf)

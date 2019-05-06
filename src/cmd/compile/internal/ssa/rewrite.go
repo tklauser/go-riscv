@@ -1053,6 +1053,17 @@ func isInlinableMemmove(dst, src *Value, sz int64, c *Config) bool {
 	return false
 }
 
+// hasSmallRotate reports whether the architecture has rotate instructions
+// for sizes < 32-bit.  This is used to decide whether to promote some rotations.
+func hasSmallRotate(c *Config) bool {
+	switch c.arch {
+	case "amd64", "amd64p32", "386":
+		return true
+	default:
+		return false
+	}
+}
+
 // encodes the lsb and width for arm(64) bitfield ops into the expected auxInt format.
 func armBFAuxInt(lsb, width int64) int64 {
 	if lsb < 0 || lsb > 63 {
@@ -1129,17 +1140,20 @@ func needRaceCleanup(sym interface{}, v *Value) bool {
 		for _, v := range b.Values {
 			switch v.Op {
 			case OpStaticCall:
-				switch v.Aux.(fmt.Stringer).String() {
-				case "runtime.racefuncenter", "runtime.racefuncexit", "runtime.panicindex",
-					"runtime.panicslice", "runtime.panicdivide", "runtime.panicwrap",
-					"runtime.panicshift":
 				// Check for racefuncenter will encounter racefuncexit and vice versa.
 				// Allow calls to panic*
-				default:
-					// If we encountered any call, we need to keep racefunc*,
-					// for accurate stacktraces.
-					return false
+				s := v.Aux.(fmt.Stringer).String()
+				switch s {
+				case "runtime.racefuncenter", "runtime.racefuncexit",
+					"runtime.panicdivide", "runtime.panicwrap",
+					"runtime.panicshift":
+					continue
 				}
+				// If we encountered any call, we need to keep racefunc*,
+				// for accurate stacktraces.
+				return false
+			case OpPanicBounds, OpPanicExtend:
+				// Note: these are panic generators that are ok (like the static calls above).
 			case OpClosureCall, OpInterCall:
 				// We must keep the race functions if there are any other call types.
 				return false
