@@ -118,18 +118,6 @@ pkg syscall (darwin-386-cgo), type Credential struct, NoSetGroups bool
 pkg syscall (darwin-386), type Credential struct, NoSetGroups bool
 pkg syscall (darwin-amd64-cgo), type Credential struct, NoSetGroups bool
 pkg syscall (darwin-amd64), type Credential struct, NoSetGroups bool
-pkg syscall (freebsd-386-cgo), func Pipe2([]int, int) error
-pkg syscall (freebsd-386-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (freebsd-386), func Pipe2([]int, int) error
-pkg syscall (freebsd-386), type Credential struct, NoSetGroups bool
-pkg syscall (freebsd-amd64-cgo), func Pipe2([]int, int) error
-pkg syscall (freebsd-amd64-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (freebsd-amd64), func Pipe2([]int, int) error
-pkg syscall (freebsd-amd64), type Credential struct, NoSetGroups bool
-pkg syscall (freebsd-arm-cgo), func Pipe2([]int, int) error
-pkg syscall (freebsd-arm-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (freebsd-arm), func Pipe2([]int, int) error
-pkg syscall (freebsd-arm), type Credential struct, NoSetGroups bool
 pkg syscall (linux-386-cgo), type Credential struct, NoSetGroups bool
 pkg syscall (linux-386-cgo), type SysProcAttr struct, AmbientCaps []uintptr
 pkg syscall (linux-386), type Credential struct, NoSetGroups bool
@@ -142,16 +130,6 @@ pkg syscall (linux-arm-cgo), type Credential struct, NoSetGroups bool
 pkg syscall (linux-arm-cgo), type SysProcAttr struct, AmbientCaps []uintptr
 pkg syscall (linux-arm), type Credential struct, NoSetGroups bool
 pkg syscall (linux-arm), type SysProcAttr struct, AmbientCaps []uintptr
-pkg syscall (netbsd-386-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (netbsd-386), type Credential struct, NoSetGroups bool
-pkg syscall (netbsd-amd64-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (netbsd-amd64), type Credential struct, NoSetGroups bool
-pkg syscall (netbsd-arm-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (netbsd-arm), type Credential struct, NoSetGroups bool
-pkg syscall (openbsd-386-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (openbsd-386), type Credential struct, NoSetGroups bool
-pkg syscall (openbsd-amd64-cgo), type Credential struct, NoSetGroups bool
-pkg syscall (openbsd-amd64), type Credential struct, NoSetGroups bool
 pkg syscall (windows-386), const WSAECONNABORTED = 10053
 pkg syscall (windows-386), const WSAECONNABORTED Errno
 pkg syscall (windows-amd64), const WSAECONNABORTED = 10053

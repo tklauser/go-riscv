@@ -475,58 +475,6 @@ pkg runtime/trace, method (*Region) End()
 pkg runtime/trace, method (*Task) End()
 pkg runtime/trace, type Region struct
 pkg runtime/trace, type Task struct
-pkg syscall (netbsd-386), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (netbsd-386), func Pipe2([]int, int) error
-pkg syscall (netbsd-386-cgo), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (netbsd-386-cgo), func Pipe2([]int, int) error
-pkg syscall (netbsd-amd64), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (netbsd-amd64), func Pipe2([]int, int) error
-pkg syscall (netbsd-amd64-cgo), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (netbsd-amd64-cgo), func Pipe2([]int, int) error
-pkg syscall (netbsd-arm), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (netbsd-arm), func Pipe2([]int, int) error
-pkg syscall (netbsd-arm-cgo), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (netbsd-arm-cgo), func Pipe2([]int, int) error
-pkg syscall (openbsd-386), const SOCK_CLOEXEC = 32768
-pkg syscall (openbsd-386), const SOCK_CLOEXEC ideal-int
-pkg syscall (openbsd-386), const SOCK_NONBLOCK = 16384
-pkg syscall (openbsd-386), const SOCK_NONBLOCK ideal-int
-pkg syscall (openbsd-386), const SYS_ACCEPT4 = 93
-pkg syscall (openbsd-386), const SYS_ACCEPT4 ideal-int
-pkg syscall (openbsd-386), const SYS_PIPE2 = 101
-pkg syscall (openbsd-386), const SYS_PIPE2 ideal-int
-pkg syscall (openbsd-386), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (openbsd-386), func Pipe2([]int, int) error
-pkg syscall (openbsd-386-cgo), const SOCK_CLOEXEC = 32768
-pkg syscall (openbsd-386-cgo), const SOCK_CLOEXEC ideal-int
-pkg syscall (openbsd-386-cgo), const SOCK_NONBLOCK = 16384
-pkg syscall (openbsd-386-cgo), const SOCK_NONBLOCK ideal-int
-pkg syscall (openbsd-386-cgo), const SYS_ACCEPT4 = 93
-pkg syscall (openbsd-386-cgo), const SYS_ACCEPT4 ideal-int
-pkg syscall (openbsd-386-cgo), const SYS_PIPE2 = 101
-pkg syscall (openbsd-386-cgo), const SYS_PIPE2 ideal-int
-pkg syscall (openbsd-386-cgo), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (openbsd-386-cgo), func Pipe2([]int, int) error
-pkg syscall (openbsd-amd64), const SOCK_CLOEXEC = 32768
-pkg syscall (openbsd-amd64), const SOCK_CLOEXEC ideal-int
-pkg syscall (openbsd-amd64), const SOCK_NONBLOCK = 16384
-pkg syscall (openbsd-amd64), const SOCK_NONBLOCK ideal-int
-pkg syscall (openbsd-amd64), const SYS_ACCEPT4 = 93
-pkg syscall (openbsd-amd64), const SYS_ACCEPT4 ideal-int
-pkg syscall (openbsd-amd64), const SYS_PIPE2 = 101
-pkg syscall (openbsd-amd64), const SYS_PIPE2 ideal-int
-pkg syscall (openbsd-amd64), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (openbsd-amd64), func Pipe2([]int, int) error
-pkg syscall (openbsd-amd64-cgo), const SOCK_CLOEXEC = 32768
-pkg syscall (openbsd-amd64-cgo), const SOCK_CLOEXEC ideal-int
-pkg syscall (openbsd-amd64-cgo), const SOCK_NONBLOCK = 16384
-pkg syscall (openbsd-amd64-cgo), const SOCK_NONBLOCK ideal-int
-pkg syscall (openbsd-amd64-cgo), const SYS_ACCEPT4 = 93
-pkg syscall (openbsd-amd64-cgo), const SYS_ACCEPT4 ideal-int
-pkg syscall (openbsd-amd64-cgo), const SYS_PIPE2 = 101
-pkg syscall (openbsd-amd64-cgo), const SYS_PIPE2 ideal-int
-pkg syscall (openbsd-amd64-cgo), func Accept4(int, int) (int, Sockaddr, error)
-pkg syscall (openbsd-amd64-cgo), func Pipe2([]int, int) error
 pkg syscall (windows-386), const TOKEN_ADJUST_SESSIONID = 256
 pkg syscall (windows-386), const TOKEN_ADJUST_SESSIONID ideal-int
 pkg syscall (windows-386), const TOKEN_ALL_ACCESS = 983551

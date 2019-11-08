@@ -602,18 +602,6 @@ pkg strings, method (*Builder) WriteByte(uint8) error
 pkg strings, method (*Builder) WriteRune(int32) (int, error)
 pkg strings, method (*Builder) WriteString(string) (int, error)
 pkg strings, type Builder struct
-pkg syscall (freebsd-386), const SYS_UTIMENSAT = 547
-pkg syscall (freebsd-386), const SYS_UTIMENSAT ideal-int
-pkg syscall (freebsd-386-cgo), const SYS_UTIMENSAT = 547
-pkg syscall (freebsd-386-cgo), const SYS_UTIMENSAT ideal-int
-pkg syscall (freebsd-amd64), const SYS_UTIMENSAT = 547
-pkg syscall (freebsd-amd64), const SYS_UTIMENSAT ideal-int
-pkg syscall (freebsd-amd64-cgo), const SYS_UTIMENSAT = 547
-pkg syscall (freebsd-amd64-cgo), const SYS_UTIMENSAT ideal-int
-pkg syscall (freebsd-arm), const SYS_UTIMENSAT = 547
-pkg syscall (freebsd-arm), const SYS_UTIMENSAT ideal-int
-pkg syscall (freebsd-arm-cgo), const SYS_UTIMENSAT = 547
-pkg syscall (freebsd-arm-cgo), const SYS_UTIMENSAT ideal-int
 pkg syscall (windows-386), func CreateProcessAsUser(Token, *uint16, *uint16, *SecurityAttributes, *SecurityAttributes, bool, uint32, *uint16, *uint16, *StartupInfo, *ProcessInformation) error
 pkg syscall (windows-386), type SysProcAttr struct, Token Token
 pkg syscall (windows-amd64), func CreateProcessAsUser(Token, *uint16, *uint16, *SecurityAttributes, *SecurityAttributes, bool, uint32, *uint16, *uint16, *StartupInfo, *ProcessInformation) error
