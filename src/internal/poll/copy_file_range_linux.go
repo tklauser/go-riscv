@@ -58,9 +58,12 @@ func CopyFileRange(dst, src *FD, remain int64) (written int64, handled bool, err
 		if major > 5 || (major == 5 && minor >= 3) {
 			atomic.StoreInt32(&copyFileRangeSupported, 1)
 		} else {
-			// copy_file_range(2) is broken in various ways on kernels older than 5.3,
+			// copy_file_range(2) was introduced in Linux 4.5,
+			// however it is broken in various ways on kernels older than 5.3,
 			// see issue #42400 and
 			// https://man7.org/linux/man-pages/man2/copy_file_range.2.html#VERSIONS
+			// Thus, do not try to use copy_file_range(2) again and
+			// let the caller fall back to generic code.
 			atomic.StoreInt32(&copyFileRangeSupported, 0)
 			return 0, false, nil
 		}
@@ -72,31 +75,13 @@ func CopyFileRange(dst, src *FD, remain int64) (written int64, handled bool, err
 		}
 		n, err := copyFileRange(dst, src, int(max))
 		switch err {
-		case syscall.ENOSYS:
-			// copy_file_range(2) was introduced in Linux 4.5.
-			// Go supports Linux >= 2.6.33, so the system call
-			// may not be present.
+		case syscall.EINVAL, syscall.EIO, syscall.EOPNOTSUPP, syscall.EPERM:
+			// If we see any of these, we have not transfered any
+			// data, and we can let the caller fall back to generic
+			// code:
 			//
-			// If we see ENOSYS, we have certainly not transfered
-			// any data, so we can tell the caller that we
-			// couldn't handle the transfer and let them fall
-			// back to more generic code.
-			//
-			// Seeing ENOSYS also means that we will not try to
-			// use copy_file_range(2) again.
-			atomic.StoreInt32(&copyFileRangeSupported, 0)
-			return 0, false, nil
-		case syscall.EXDEV, syscall.EINVAL, syscall.EIO, syscall.EOPNOTSUPP, syscall.EPERM:
-			// Prior to Linux 5.3, it was not possible to
-			// copy_file_range across file systems. Similarly to
-			// the ENOSYS case above, if we see EXDEV, we have
-			// not transfered any data, and we can let the caller
-			// fall back to generic code.
-			//
-			// As for EINVAL, that is what we see if, for example,
-			// dst or src refer to a pipe rather than a regular
-			// file. This is another case where no data has been
-			// transfered, so we consider it unhandled.
+			// We see EINVAL if, for example, dst or src refer to a
+			// pipe rather than a regular file.
 			//
 			// If src and dst are on CIFS, we can see EIO.
 			// See issue #42334.
